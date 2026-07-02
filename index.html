@@ -131,6 +131,9 @@
   .card-actions .icon-btn{border:1px solid var(--line);border-radius:8px;width:32px;height:32px}
   .type-toggle{display:flex;gap:8px;margin-bottom:14px}
   .type-toggle button{flex:1;padding:11px;border-radius:9px;border:1px solid var(--line);background:var(--bg);font-size:13.5px;font-weight:500;color:var(--muted);min-height:44px}
+  .cat-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .cat-chip{border:1px solid var(--line);background:var(--bg);color:var(--muted);padding:6px 11px;border-radius:20px;font-size:12.5px;font-weight:500;white-space:nowrap}
+  .cat-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .type-toggle button.sel-income.on{background:var(--income-bg);color:var(--income);border-color:var(--income)}
   .type-toggle button.sel-expense.on{background:var(--expense-bg);color:var(--expense);border-color:var(--expense)}
   .modal-actions{display:flex;gap:10px;margin-top:4px}
@@ -587,6 +590,55 @@ function openSettingsSheet(){
     </div>`;
 }
 
+const CATEGORY_SUGGESTIONS = {
+  income: ['Salary','Income','Other Income','Side Income','Freelance','Business','Interest','Dividend','Bonus','Gift','Refund','EMI collection'],
+  expense: ['Groceries','Rent','Utilities','Transport','Dining out','Shopping','Health','Entertainment','Subscriptions','Travel','Education','Insurance','EMI payment','Miscellaneous']
+};
+function getCategorySuggestions(type){
+  const counts = {};
+  state.transactions.filter(t=>t.type===type).forEach(t=>{
+    const key = (t.category||'').trim();
+    if(!key) return;
+    counts[key] = (counts[key]||0) + 1;
+  });
+  const usedSorted = Object.keys(counts).sort((a,b)=> counts[b]-counts[a] || a.localeCompare(b));
+  const base = CATEGORY_SUGGESTIONS[type] || [];
+  const seen = new Set(usedSorted.map(c=>c.toLowerCase()));
+  const rest = base.filter(c=>!seen.has(c.toLowerCase()));
+  return [...usedSorted, ...rest].slice(0, 12);
+}
+function renderCategorySuggestions(){
+  const list = getCategorySuggestions(newTxType);
+  const dl = document.getElementById('categoryList');
+  const chips = document.getElementById('catChips');
+  if(dl) dl.innerHTML = list.map(c=>`<option value="${escapeHtml(c)}"></option>`).join('');
+  if(chips) chips.innerHTML = list.slice(0,8).map(c=>`<button type="button" class="cat-chip" data-cat="${escapeHtml(c)}" onclick="pickCategory('${escapeHtml(c).replace(/'/g,"\\'")}')">${escapeHtml(c)}</button>`).join('');
+  highlightActiveChip();
+}
+function pickCategory(c){
+  document.getElementById('txCategory').value = c;
+  highlightActiveChip();
+}
+function highlightActiveChip(){
+  const val = (document.getElementById('txCategory')?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#catChips .cat-chip').forEach(btn=>{
+    btn.classList.toggle('on', btn.dataset.cat.toLowerCase() === val);
+  });
+}
+function parseAmount(str){
+  return Number(String(str||'').replace(/,/g,'')) || 0;
+}
+function formatAmountInput(el){
+  let raw = el.value.replace(/[^0-9.]/g,'');
+  const firstDot = raw.indexOf('.');
+  if(firstDot !== -1) raw = raw.slice(0, firstDot+1) + raw.slice(firstDot+1).replace(/\./g,'');
+  const parts = raw.split('.');
+  let intPart = parts[0].replace(/^0+(?=\d)/, '');
+  const hasDot = parts.length > 1;
+  const decPart = hasDot ? '.' + parts[1].slice(0,2) : '';
+  const formattedInt = intPart ? Number(intPart).toLocaleString('en-IN') : '';
+  el.value = formattedInt + decPart;
+}
 let newTxType = 'expense';
 function openTransactionModal(){
   newTxType = 'expense';
@@ -600,8 +652,13 @@ function openTransactionModal(){
             <button type="button" id="ttInc" class="sel-income" onclick="setTxType('income')">Income</button>
             <button type="button" id="ttExp" class="sel-expense on" onclick="setTxType('expense')">Expense</button>
           </div>
-          <div class="field"><label for="txAmount">Amount</label><input id="txAmount" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0"></div>
-          <div class="field"><label for="txCategory">Category</label><input id="txCategory" type="text" required placeholder="e.g. Groceries, Salary, Rent"></div>
+          <div class="field"><label for="txAmount">Amount</label><input id="txAmount" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this)"></div>
+          <div class="field">
+            <label for="txCategory">Category</label>
+            <input id="txCategory" type="text" list="categoryList" required placeholder="e.g. Groceries, Salary, Rent" oninput="highlightActiveChip()">
+            <datalist id="categoryList"></datalist>
+            <div class="cat-chips" id="catChips"></div>
+          </div>
           <div class="field"><label for="txDate">Date</label><input id="txDate" type="date" value="${todayISO()}" required></div>
           <div class="field"><label for="txNote">Note (optional)</label><input id="txNote" type="text" placeholder="Any detail worth remembering"></div>
           <div class="modal-actions">
@@ -611,15 +668,18 @@ function openTransactionModal(){
         </form>
       </div>
     </div>`;
+  renderCategorySuggestions();
 }
 function setTxType(t){
   newTxType = t;
   document.getElementById('ttInc').classList.toggle('on', t==='income');
   document.getElementById('ttExp').classList.toggle('on', t==='expense');
+  document.getElementById('txCategory').value = '';
+  renderCategorySuggestions();
 }
 function submitTransaction(e){
   e.preventDefault();
-  const amount = Number(document.getElementById('txAmount').value);
+  const amount = parseAmount(document.getElementById('txAmount').value);
   const category = document.getElementById('txCategory').value.trim() || 'Uncategorised';
   const date = document.getElementById('txDate').value || todayISO();
   const note = document.getElementById('txNote').value.trim();
@@ -649,7 +709,7 @@ function openLoanModal(){
           </div>
           <div class="field"><label for="lnPhone">Phone number (optional)</label><input id="lnPhone" type="tel" placeholder="For calling or sharing details"></div>
           <div class="grid2">
-            <div class="field"><label for="lnPrincipal">Amount lent</label><input id="lnPrincipal" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0" oninput="updateEmiPreview('ln')"></div>
+            <div class="field"><label for="lnPrincipal">Amount lent</label><input id="lnPrincipal" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this);updateEmiPreview('ln')"></div>
             <div class="field"><label for="lnRate">Interest rate (%/mo)</label><input id="lnRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional, e.g. 5" oninput="updateEmiPreview('ln')"></div>
           </div>
           <div class="grid2">
@@ -661,7 +721,7 @@ function openLoanModal(){
           <div class="emi-preview" id="lnEmiPreview">Enter the amount and interest rate to see the EMI.</div>
           <button type="button" class="calc-link" onclick="calcEmi('ln')">Use this EMI</button>
           <div class="grid2">
-            <div class="field"><label for="lnEmi">EMI amount</label><input id="lnEmi" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0"></div>
+            <div class="field"><label for="lnEmi">EMI amount</label><input id="lnEmi" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this)"></div>
             <div class="field"><label for="lnCount">Number of EMIs</label><input id="lnCount" type="number" inputmode="numeric" min="1" step="1" required placeholder="e.g. 6"></div>
           </div>
           <div class="modal-actions">
@@ -677,9 +737,9 @@ function submitLoan(e){
   e.preventDefault();
   const borrower = document.getElementById('lnBorrower').value.trim();
   const phone = document.getElementById('lnPhone').value.trim();
-  const principal = Number(document.getElementById('lnPrincipal').value);
+  const principal = parseAmount(document.getElementById('lnPrincipal').value);
   const rate = Number(document.getElementById('lnRate').value) || 0;
-  const emiAmount = Number(document.getElementById('lnEmi').value);
+  const emiAmount = parseAmount(document.getElementById('lnEmi').value);
   const freq = document.getElementById('lnFreq').value;
   const count = Number(document.getElementById('lnCount').value);
   const start = document.getElementById('lnStart').value || todayISO();
@@ -732,7 +792,7 @@ function openBorrowModal(){
           </div>
           <div class="field"><label for="brPhone">Phone number (optional)</label><input id="brPhone" type="tel" placeholder="For calling or sharing details"></div>
           <div class="grid2">
-            <div class="field"><label for="brPrincipal">Loan amount</label><input id="brPrincipal" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0" oninput="updateEmiPreview('br')"></div>
+            <div class="field"><label for="brPrincipal">Loan amount</label><input id="brPrincipal" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this);updateEmiPreview('br')"></div>
             <div class="field"><label for="brRate">Interest rate (%/mo)</label><input id="brRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional" oninput="updateEmiPreview('br')"></div>
           </div>
           <div class="grid2">
@@ -744,7 +804,7 @@ function openBorrowModal(){
           <div class="emi-preview" id="brEmiPreview">Enter the amount and interest rate to see the EMI.</div>
           <button type="button" class="calc-link" onclick="calcEmi('br')">Use this EMI</button>
           <div class="grid2">
-            <div class="field"><label for="brEmi">EMI amount</label><input id="brEmi" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="e.g. 18000"></div>
+            <div class="field"><label for="brEmi">EMI amount</label><input id="brEmi" type="text" inputmode="decimal" required placeholder="e.g. 18,000" oninput="formatAmountInput(this)"></div>
             <div class="field"><label for="brCount">Number of EMIs</label><input id="brCount" type="number" inputmode="numeric" min="1" step="1" required placeholder="e.g. 36"></div>
           </div>
           <div class="modal-actions">
@@ -760,9 +820,9 @@ function submitBorrow(e){
   e.preventDefault();
   const lender = document.getElementById('brLender').value.trim();
   const phone = document.getElementById('brPhone').value.trim();
-  const principal = Number(document.getElementById('brPrincipal').value);
+  const principal = parseAmount(document.getElementById('brPrincipal').value);
   const rate = Number(document.getElementById('brRate').value) || 0;
-  const emiAmount = Number(document.getElementById('brEmi').value);
+  const emiAmount = parseAmount(document.getElementById('brEmi').value);
   const freq = document.getElementById('brFreq').value;
   const count = Number(document.getElementById('brCount').value);
   const start = document.getElementById('brStart').value || todayISO();
@@ -816,7 +876,7 @@ function computeEmi(principal, rate, freq){
   return Math.round(principal * periodRate / 100);
 }
 function updateEmiPreview(prefix){
-  const principal = Number(document.getElementById(prefix + 'Principal').value);
+  const principal = parseAmount(document.getElementById(prefix + 'Principal').value);
   const rate = Number(document.getElementById(prefix + 'Rate').value);
   const freq = document.getElementById(prefix + 'Freq').value;
   const box = document.getElementById(prefix + 'EmiPreview');
@@ -826,11 +886,12 @@ function updateEmiPreview(prefix){
   box.innerHTML = `Estimated EMI: <b>₹${emi.toLocaleString('en-IN')}</b> per ${freq==='monthly'?'month':freq==='weekly'?'week':'year'}, at ${rate}%/month on ₹${principal.toLocaleString('en-IN')}.`;
 }
 function calcEmi(prefix){
-  const principal = Number(document.getElementById(prefix + 'Principal').value);
+  const principal = parseAmount(document.getElementById(prefix + 'Principal').value);
   const rate = Number(document.getElementById(prefix + 'Rate').value);
   const freq = document.getElementById(prefix + 'Freq').value;
   if(!principal || !rate){ alert('Enter the amount and the monthly interest rate first.'); return; }
-  document.getElementById(prefix + 'Emi').value = computeEmi(principal, rate, freq);
+  const emiField = document.getElementById(prefix + 'Emi');
+  emiField.value = computeEmi(principal, rate, freq).toLocaleString('en-IN');
 }
 
 const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window);
