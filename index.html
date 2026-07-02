@@ -213,18 +213,68 @@ function addDays(iso, n){
 }
 
 async function loadState(){
+  let loaded = null;
+  // Primary: browser localStorage — always available, survives file/app updates as long as it's the same origin.
   try{
-    const res = await window.storage.get(STORAGE_KEY);
-    if(res && res.value){ state = JSON.parse(res.value); }
-  }catch(e){ /* no saved data yet */ }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) loaded = JSON.parse(raw);
+  }catch(e){ /* localStorage unavailable or corrupted */ }
+  // Secondary: Claude artifact storage — used only if localStorage was empty (e.g. very first run inside an artifact).
+  if(!loaded && typeof window.storage !== 'undefined'){
+    try{
+      const res = await window.storage.get(STORAGE_KEY);
+      if(res && res.value) loaded = JSON.parse(res.value);
+    }catch(e){ /* no saved data yet */ }
+  }
+  if(loaded) state = loaded;
   if(!state.transactions) state.transactions = [];
   if(!state.loans) state.loans = [];
   if(!state.borrowings) state.borrowings = [];
   render();
 }
 async function saveState(){
-  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(state)); }
-  catch(e){ console.error('Could not save', e); }
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch(e){ console.error('Could not save locally', e); }
+  if(typeof window.storage !== 'undefined'){
+    try{ await window.storage.set(STORAGE_KEY, JSON.stringify(state)); }
+    catch(e){ /* artifact storage optional, ignore failures */ }
+  }
+}
+function exportData(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ledger-lend-backup-' + todayISO() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  closeModal();
+}
+function importData(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed || typeof parsed !== 'object') throw new Error('Invalid backup file');
+      if(!confirm('This will replace your current data with the backup file. Continue?')) return;
+      state = {
+        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+        loans: Array.isArray(parsed.loans) ? parsed.loans : [],
+        borrowings: Array.isArray(parsed.borrowings) ? parsed.borrowings : []
+      };
+      saveState();
+      closeModal();
+      render();
+    }catch(err){
+      alert('Could not read that file. Please choose a valid backup .json file exported from this app.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
 
 function generateSchedule(start, emiAmount, freq, count){
@@ -263,18 +313,27 @@ function totals(){
 
 function allPendingCollections(){
   const out = [];
-  state.loans.forEach(l => { l.installments.forEach(i => { if(i.status==='pending') out.push({ ...i, who: l.borrower, loanId: l.id, kind:'collect' }); }); });
+  state.loans.forEach(l => {
+    const next = l.installments.find(i => i.status === 'pending');
+    if(next) out.push({ ...next, who: l.borrower, loanId: l.id, kind:'collect' });
+  });
   out.sort((a,b) => a.due.localeCompare(b.due));
   return out;
 }
 function allPendingPayments(){
   const out = [];
-  state.borrowings.forEach(l => { l.installments.forEach(i => { if(i.status==='pending') out.push({ ...i, who: l.lender, loanId: l.id, kind:'pay' }); }); });
+  state.borrowings.forEach(l => {
+    const next = l.installments.find(i => i.status === 'pending');
+    if(next) out.push({ ...next, who: l.lender, loanId: l.id, kind:'pay' });
+  });
   out.sort((a,b) => a.due.localeCompare(b.due));
   return out;
 }
 function combinedDue(limit){
-  return [...allPendingCollections(), ...allPendingPayments()].sort((a,b)=>a.due.localeCompare(b.due)).slice(0,limit);
+  return [...allPendingCollections(), ...allPendingPayments()]
+    .filter(p => daysBetween(todayISO(), p.due) <= 5)
+    .sort((a,b)=>a.due.localeCompare(b.due))
+    .slice(0,limit);
 }
 
 function setView(v){ currentView = v; render(); }
@@ -584,6 +643,9 @@ function openSettingsSheet(){
       <div class="modal settings-sheet">
         <div class="sheet-handle"></div>
         <h2>Settings</h2>
+        <button class="opt" onclick="exportData()">${ICONS.share} Backup data (.json)</button>
+        <button class="opt" onclick="document.getElementById('importFileInput').click()">${ICONS.up} Restore from backup</button>
+        <input type="file" id="importFileInput" accept="application/json" style="display:none" onchange="importData(event)">
         <button class="opt danger" onclick="confirmClearAll()">${ICONS.trash} Clear all data</button>
         <button class="opt" onclick="closeModal()">Close</button>
       </div>
