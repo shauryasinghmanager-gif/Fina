@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F7F5EF">
+<title>Ledger &amp; Lend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F7F5EF; --surface:#FFFFFF; --ink:#211F1B; --muted:#79736A; --line:#E4DFD2;
+    --income:#2F6B4F; --income-bg:#E7F0EA;
+    --expense:#B1502F; --expense-bg:#F5E7E0;
+    --loan:#3B5170; --loan-bg:#E9ECF1;
+    --warn:#B4801F; --warn-bg:#F6EEDC;
+    --danger:#A93226; --danger-bg:#F5E1DE;
+    --radius:12px;
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sat: env(safe-area-inset-top, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;font-size:15px;line-height:1.5;overscroll-behavior-y:none}
+  .num{font-family:'IBM Plex Mono',monospace}
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:16px}
+  a{color:inherit}
+
+  .app-shell{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);position:relative}
+
+  .appbar{position:sticky;top:0;z-index:20;background:var(--bg);padding:calc(14px + var(--sat)) 18px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+  .appbar .brand{display:flex;align-items:baseline;gap:5px}
+  .appbar h1{font-size:19px}
+  .appbar .amp{color:var(--expense)}
+  .icon-btn{border:none;background:none;color:var(--muted);padding:8px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .icon-btn:active{background:var(--line)}
+  .icon-btn svg{width:18px;height:18px}
+
+  .content{flex:1;padding:16px 16px calc(120px + var(--sab))}
+
+  .bottom-nav{position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--surface);border-top:1px solid var(--line);display:flex;padding:6px 6px calc(6px + var(--sab));z-index:20}
+  .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border:none;background:none;color:var(--muted);border-radius:10px;font-size:10.5px;font-weight:500}
+  .nav-item.active{color:var(--ink)}
+  .nav-item svg{width:21px;height:21px}
+  .nav-item:active{background:var(--bg)}
+
+  .fab{position:fixed;right:calc(50% - 260px + 18px);bottom:calc(78px + var(--sab));width:54px;height:54px;border-radius:50%;background:var(--ink);color:#fff;border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(33,31,27,.28);z-index:19}
+  .fab:active{transform:scale(.94)}
+  .fab svg{width:24px;height:24px}
+  @media (max-width:559px){ .fab{right:18px} }
+
+  .page-head{margin-bottom:16px}
+  .page-head p{color:var(--muted);margin:3px 0 0;font-size:13px}
+  .page-head h2{font-size:20px}
+
+  .btn{border:1px solid var(--line);background:var(--surface);padding:10px 15px;border-radius:9px;font-size:14px;font-weight:500;color:var(--ink);min-height:40px}
+  .btn-primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btn-sm{padding:7px 12px;font-size:12.5px;border-radius:7px;min-height:32px}
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px}
+  .card .card-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .card .card-value{font-size:20px;margin-top:7px;font-weight:500}
+  .card .card-sub{font-size:11px;color:var(--muted);margin-top:3px}
+  .income-text{color:var(--income)} .expense-text{color:var(--expense)} .loan-text{color:var(--loan)}
+
+  section.block{margin-bottom:26px}
+  .block-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .block-title h2{font-size:15px}
+  .see-all{font-size:12.5px;color:var(--muted);background:none;border:none;text-decoration:underline;text-underline-offset:2px;padding:4px 0}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:4px 15px}
+  .empty{color:var(--muted);font-size:13px;padding:24px 4px;text-align:center}
+
+  .ledger-row{display:flex;align-items:center;gap:8px;padding:13px 0;border-bottom:1px dashed var(--line)}
+  .ledger-row:last-child{border-bottom:none}
+  .lr-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .lr-main{flex:1 1 auto;min-width:0}
+  .lr-label{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lr-sub{color:var(--muted);font-size:11.5px;margin-top:1px}
+  .lr-amount{flex:0 0 auto;font-weight:500;white-space:nowrap;font-size:13.5px;text-align:right}
+  .lr-actions{flex:0 0 auto;display:flex;gap:2px}
+
+  .stamp{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid currentColor;white-space:nowrap;margin-top:3px}
+  .stamp.paid{color:var(--income)} .stamp.due{color:var(--warn)} .stamp.overdue{color:var(--danger)} .stamp.upcoming{color:var(--muted)}
+
+  .tabs{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto}
+  .tab{padding:8px 14px;border-radius:20px;border:1px solid var(--line);background:var(--surface);font-size:12.5px;font-weight:500;color:var(--muted);white-space:nowrap}
+  .tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tab.active.borrow-active{background:var(--expense);border-color:var(--expense)}
+
+  .loan-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px;margin-bottom:12px}
+  .loan-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .loan-head h3{font-size:16px}
+  .loan-meta{color:var(--muted);font-size:11.5px;margin-top:3px}
+  .progress-track{height:6px;border-radius:4px;background:var(--bg);overflow:hidden;margin:12px 0 8px}
+  .progress-fill{height:100%;background:var(--loan)}
+  .progress-fill.pay{background:var(--expense)}
+  .loan-figures{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted)}
+  .loan-figures b{color:var(--ink);font-family:'IBM Plex Mono',monospace;font-weight:500}
+  .schedule{display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  .schedule.open{display:block}
+  .sched-row{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:12.5px;flex-wrap:wrap}
+  .sched-row .sd{width:70px;color:var(--muted);flex:0 0 auto}
+  .sched-row .sa{font-family:'IBM Plex Mono',monospace;width:66px;flex:0 0 auto}
+  .toggle-sched{background:none;border:none;color:var(--loan);font-size:12.5px;text-decoration:underline;text-underline-offset:2px;margin-top:10px;padding:4px 0}
+  .toggle-sched.pay{color:var(--expense)}
+
+  .overlay{position:fixed;inset:0;background:rgba(33,31,27,.42);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+  .modal{background:var(--surface);border-radius:18px 18px 0 0;padding:10px 20px calc(22px + var(--sab));width:100%;max-width:520px;max-height:88vh;overflow-y:auto;animation:sheetUp .18s ease-out}
+  @keyframes sheetUp{from{transform:translateY(24px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  .sheet-handle{width:36px;height:4px;border-radius:3px;background:var(--line);margin:0 auto 14px}
+  .modal h2{font-size:17px;margin-bottom:14px}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);min-height:44px}
+  .field textarea{resize:vertical;min-height:50px}
+  .field-row{display:flex;gap:8px;align-items:flex-end}
+  .field-row .field{flex:1;margin-bottom:0}
+  .pick-contact{flex:0 0 auto;width:44px;height:44px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--muted);display:flex;align-items:center;justify-content:center}
+  .pick-contact:active{background:var(--line)}
+  .calc-link{background:none;border:none;color:var(--loan);font-size:12.5px;text-decoration:underline;text-underline-offset:2px;padding:0 0 14px;display:block;text-align:left}
+  .emi-preview{font-size:13px;color:var(--muted);background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:9px 12px;margin-bottom:8px}
+  .emi-preview b{color:var(--ink);font-family:'IBM Plex Mono',monospace;font-weight:500}
+  .card-actions{display:flex;gap:6px}
+  .card-actions .icon-btn{border:1px solid var(--line);border-radius:8px;width:32px;height:32px}
+  .type-toggle{display:flex;gap:8px;margin-bottom:14px}
+  .type-toggle button{flex:1;padding:11px;border-radius:9px;border:1px solid var(--line);background:var(--bg);font-size:13.5px;font-weight:500;color:var(--muted);min-height:44px}
+  .type-toggle button.sel-income.on{background:var(--income-bg);color:var(--income);border-color:var(--income)}
+  .type-toggle button.sel-expense.on{background:var(--expense-bg);color:var(--expense);border-color:var(--expense)}
+  .modal-actions{display:flex;gap:10px;margin-top:4px}
+  .modal-actions button{flex:1;min-height:46px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  .bars{display:flex;align-items:flex-end;gap:10px;height:140px;padding-top:10px}
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+  .bar-pair{display:flex;align-items:flex-end;gap:3px;height:100%}
+  .bar{width:11px;border-radius:2px 2px 0 0}
+  .bar.income-bar{background:var(--income)} .bar.expense-bar{background:var(--expense)}
+  .bar-col .bl{font-size:10px;color:var(--muted);margin-top:2px}
+  .legend{display:flex;gap:16px;font-size:11.5px;color:var(--muted);margin-bottom:2px}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+
+  .cat-row{display:flex;align-items:center;gap:8px;padding:9px 0}
+  .cat-row .cn{width:92px;font-size:12px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cat-track{flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+  .cat-fill{height:100%;background:var(--expense)}
+  .cat-amt{width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11.5px;flex:0 0 auto}
+
+  .settings-sheet .opt{width:100%;text-align:left;padding:13px 4px;border:none;background:none;font-size:14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .settings-sheet .opt:last-child{border-bottom:none}
+  .settings-sheet .opt.danger{color:var(--danger)}
+
+  .loading-screen{display:flex;align-items:center;justify-content:center;height:100vh;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading-screen">Opening the ledger…</div></div>
+<script>
+const STORAGE_KEY = 'ledgerlend:data:v2';
+let state = { transactions: [], loans: [], borrowings: [] };
+let currentView = 'dashboard';
+let loansTab = 'lent';
+let openSchedules = {};
+let txFilter = 'all';
+
+const ICONS = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="12" width="8" height="9" rx="1.5"/><rect x="3" y="14" width="8" height="7" rx="1.5"/></svg>',
+  transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg>',
+  loans: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="7" r="2.4"/><path d="M15 20c0-2.6 1.6-4.3 3.8-4.9"/></svg>',
+  reports: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M4 6h16M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 12l5 5 11-11"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.6 7.6 0 000-2l2-1.5-2-3.4-2.4 1a7.5 7.5 0 00-1.7-1L15 3h-4l-.3 2.6a7.5 7.5 0 00-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 000 2l-2 1.5 2 3.4 2.4-1a7.5 7.5 0 001.7 1L11 21h4l.3-2.6a7.5 7.5 0 001.7-1l2.4 1 2-3.4z"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M4 4h4l1.5 4.5-2.2 1.8a13 13 0 006.4 6.4l1.8-2.2 4.5 1.5v4a2 2 0 01-2.2 2A17 17 0 013 6.2 2 2 0 014 4z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="18" cy="5" r="2.4"/><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="19" r="2.4"/><path d="M8.2 10.8l7.6-4.6M8.2 13.2l7.6 4.6"/></svg>',
+  contact: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3-6.2 7-6.2s7 2.6 7 6.2"/></svg>'
+};
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtMoney(n){ n = Math.round(n||0); return '₹' + n.toLocaleString('en-IN'); }
+function fmtDate(iso){
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year: 'numeric' });
+}
+function fmtDateShort(iso){
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+}
+function daysBetween(a,b){ return Math.round((new Date(b) - new Date(a)) / 86400000); }
+function addMonths(iso, n){
+  const d = new Date(iso + 'T00:00:00');
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().slice(0,10);
+}
+function addDays(iso, n){
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0,10);
+}
+
+async function loadState(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY);
+    if(res && res.value){ state = JSON.parse(res.value); }
+  }catch(e){ /* no saved data yet */ }
+  if(!state.transactions) state.transactions = [];
+  if(!state.loans) state.loans = [];
+  if(!state.borrowings) state.borrowings = [];
+  render();
+}
+async function saveState(){
+  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(state)); }
+  catch(e){ console.error('Could not save', e); }
+}
+
+function generateSchedule(start, emiAmount, freq, count){
+  const list = [];
+  for(let i=0;i<count;i++){
+    let due;
+    if(freq === 'weekly') due = addDays(start, 7*(i+1));
+    else if(freq === 'yearly') due = addMonths(start, 12*(i+1));
+    else due = addMonths(start, i+1);
+    list.push({ id: uid(), due, amount: Number(emiAmount), status: 'pending', paidDate: null });
+  }
+  return list;
+}
+
+function installmentStatus(inst){
+  if(inst.status === 'paid') return 'paid';
+  const d = daysBetween(todayISO(), inst.due);
+  if(d < 0) return 'overdue';
+  if(d <= 3) return 'due';
+  return 'upcoming';
+}
+
+function totals(){
+  let income=0, expense=0;
+  state.transactions.forEach(t => { if(t.type==='income') income += Number(t.amount); else expense += Number(t.amount); });
+  let lentTotal=0, collected=0;
+  state.loans.forEach(l => { l.installments.forEach(i => { lentTotal += Number(i.amount); if(i.status==='paid') collected += Number(i.amount); }); });
+  let owedTotal=0, paidBack=0;
+  state.borrowings.forEach(l => { l.installments.forEach(i => { owedTotal += Number(i.amount); if(i.status==='paid') paidBack += Number(i.amount); }); });
+  return {
+    income, expense, balance: income-expense,
+    outstanding: lentTotal - collected, lentTotal, collected,
+    owedOutstanding: owedTotal - paidBack, owedTotal, paidBack
+  };
+}
+
+function allPendingCollections(){
+  const out = [];
+  state.loans.forEach(l => { l.installments.forEach(i => { if(i.status==='pending') out.push({ ...i, who: l.borrower, loanId: l.id, kind:'collect' }); }); });
+  out.sort((a,b) => a.due.localeCompare(b.due));
+  return out;
+}
+function allPendingPayments(){
+  const out = [];
+  state.borrowings.forEach(l => { l.installments.forEach(i => { if(i.status==='pending') out.push({ ...i, who: l.lender, loanId: l.id, kind:'pay' }); }); });
+  out.sort((a,b) => a.due.localeCompare(b.due));
+  return out;
+}
+function combinedDue(limit){
+  return [...allPendingCollections(), ...allPendingPayments()].sort((a,b)=>a.due.localeCompare(b.due)).slice(0,limit);
+}
+
+function setView(v){ currentView = v; render(); }
+
+function render(){
+  const app = document.getElementById('app');
+  const titles = { dashboard:'Ledger & Lend', transactions:'Transactions', loans:'Loans & EMI', reports:'Reports' };
+  app.innerHTML = `
+    <div class="app-shell">
+      <header class="appbar">
+        <div class="brand"><h1>${currentView==='dashboard' ? 'Ledger <span class="amp">&amp;</span> Lend' : titles[currentView]}</h1></div>
+        <button class="icon-btn" onclick="openSettingsSheet()" aria-label="Settings">${ICONS.settings}</button>
+      </header>
+      <main class="content">${renderView()}</main>
+      ${currentView!=='reports' ? `<button class="fab" onclick="fabAction()" aria-label="Add">${ICONS.plus}</button>` : ''}
+      <nav class="bottom-nav">
+        ${navBtn('dashboard','Home')}
+        ${navBtn('transactions','Money')}
+        ${navBtn('loans','Loans')}
+        ${navBtn('reports','Reports')}
+      </nav>
+    </div>
+    <div id="modal-root"></div>
+  `;
+}
+function navBtn(id,label){
+  return `<button class="nav-item ${currentView===id?'active':''}" onclick="setView('${id}')">${ICONS[id]}<span>${label}</span></button>`;
+}
+function fabAction(){
+  if(currentView==='loans') { loansTab==='lent' ? openLoanModal() : openBorrowModal(); }
+  else openTransactionModal();
+}
+
+function renderView(){
+  if(currentView==='dashboard') return renderDashboard();
+  if(currentView==='transactions') return renderTransactions();
+  if(currentView==='loans') return renderLoans();
+  if(currentView==='reports') return renderReports();
+}
+
+function renderDashboard(){
+  const t = totals();
+  const due = combinedDue(5);
+  const recent = [...state.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  return `
+    <div class="page-head"><p>Here's where things stand today, ${fmtDate(todayISO())}.</p></div>
+    <div class="cards">
+      <div class="card"><div class="card-label">Income</div><div class="card-value num income-text">${fmtMoney(t.income)}</div></div>
+      <div class="card"><div class="card-label">Expense</div><div class="card-value num expense-text">${fmtMoney(t.expense)}</div></div>
+      <div class="card"><div class="card-label">Balance</div><div class="card-value num" style="color:${t.balance>=0?'var(--income)':'var(--expense)'}">${fmtMoney(t.balance)}</div></div>
+      <div class="card"><div class="card-label">Owed to you</div><div class="card-value num loan-text">${fmtMoney(t.outstanding)}</div></div>
+      <div class="card" style="grid-column:1 / -1"><div class="card-label">You still owe (loans taken)</div><div class="card-value num expense-text">${fmtMoney(t.owedOutstanding)}</div></div>
+    </div>
+
+    <section class="block">
+      <div class="block-title"><h2>Due soon</h2><button class="see-all" onclick="setView('loans')">Manage</button></div>
+      <div class="panel">
+        ${due.length ? due.map(p => dueRow(p)).join('') : `<div class="empty">Nothing due. Add a loan you've given or taken to start tracking EMIs.</div>`}
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-title"><h2>Recent activity</h2><button class="see-all" onclick="setView('transactions')">View all</button></div>
+      <div class="panel">
+        ${recent.length ? recent.map(tx => txRow(tx)).join('') : `<div class="empty">No transactions yet. Tap + to add one.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function dueRow(p){
+  const st = installmentStatus(p);
+  const labelMap = { overdue:'overdue', due:'due soon', upcoming:'upcoming', paid:'paid' };
+  const isCollect = p.kind==='collect';
+  const color = isCollect ? 'var(--loan)' : 'var(--expense)';
+  const verb = isCollect ? 'Collect from' : 'Pay to';
+  const markFn = isCollect ? `markInstallmentPaid('${p.loanId}','${p.id}')` : `markBorrowInstallmentPaid('${p.loanId}','${p.id}')`;
+  return `
+    <div class="ledger-row">
+      <span class="lr-dot" style="background:${color}"></span>
+      <div class="lr-main">
+        <div class="lr-label">${isCollect?ICONS.down:ICONS.up} ${verb} ${escapeHtml(p.who)}</div>
+        <div class="lr-sub">Due ${fmtDateShort(p.due)}</div>
+        <span class="stamp ${st}">${labelMap[st]}</span>
+      </div>
+      <div style="text-align:right">
+        <div class="lr-amount num" style="color:${color}">${fmtMoney(p.amount)}</div>
+        <button class="icon-btn" title="Mark done" onclick="${markFn}">${ICONS.check}</button>
+      </div>
+    </div>`;
+}
+
+function txRow(tx){
+  const isIncome = tx.type==='income';
+  return `
+    <div class="ledger-row">
+      <span class="lr-dot" style="background:${isIncome?'var(--income)':'var(--expense)'}"></span>
+      <div class="lr-main">
+        <div class="lr-label">${escapeHtml(tx.category)}</div>
+        <div class="lr-sub">${fmtDateShort(tx.date)}${tx.note ? ' · ' + escapeHtml(tx.note) : ''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="lr-amount num" style="color:${isIncome?'var(--income)':'var(--expense)'}">${isIncome?'+':'-'}${fmtMoney(tx.amount)}</div>
+        <button class="icon-btn" title="Delete" onclick="deleteTransaction('${tx.id}')">${ICONS.trash}</button>
+      </div>
+    </div>`;
+}
+
+function renderTransactions(){
+  const list = state.transactions
+    .filter(t => txFilter==='all' ? true : t.type===txFilter)
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  return `
+    <div class="page-head"><p>Every rupee in, every rupee out.</p></div>
+    <div class="tabs">
+      <button class="tab ${txFilter==='all'?'active':''}" onclick="setTxFilter('all')">All</button>
+      <button class="tab ${txFilter==='income'?'active':''}" onclick="setTxFilter('income')">Income</button>
+      <button class="tab ${txFilter==='expense'?'active':''}" onclick="setTxFilter('expense')">Expense</button>
+    </div>
+    <div class="panel">
+      ${list.length ? list.map(tx => txRow(tx)).join('') : `<div class="empty">Nothing here yet. Tap + to add your first entry.</div>`}
+    </div>
+  `;
+}
+function setTxFilter(f){ txFilter = f; render(); }
+
+function setLoansTab(t){ loansTab = t; render(); }
+
+function renderLoans(){
+  return `
+    <div class="page-head"><p>${loansTab==='lent' ? "Money you've lent out, and what's coming back." : "Loans you've taken, and what you still owe."}</p></div>
+    <div class="tabs">
+      <button class="tab ${loansTab==='lent'?'active':''}" onclick="setLoansTab('lent')">Loan given</button>
+      <button class="tab ${loansTab==='borrowed'?'active borrow-active':''}" onclick="setLoansTab('borrowed')">Loan taken</button>
+    </div>
+    ${loansTab==='lent' ? renderLentList() : renderBorrowedList()}
+  `;
+}
+
+function renderLentList(){
+  const loans = [...state.loans].sort((a,b)=> b.start.localeCompare(a.start));
+  return loans.length ? loans.map(l => loanCard(l)).join('') : `<div class="panel"><div class="empty">No loans given yet. Tap + to add one.</div></div>`;
+}
+function renderBorrowedList(){
+  const loans = [...state.borrowings].sort((a,b)=> b.start.localeCompare(a.start));
+  return loans.length ? loans.map(l => borrowCard(l)).join('') : `<div class="panel"><div class="empty">No borrowed loans yet. Tap + to add your car loan, personal loan, etc.</div></div>`;
+}
+
+function loanCard(l){
+  const total = l.installments.reduce((s,i)=>s+Number(i.amount),0);
+  const collected = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
+  const pct = total ? Math.round((collected/total)*100) : 0;
+  const nextPending = l.installments.find(i=>i.status==='pending');
+  const isOpen = !!openSchedules['lent-'+l.id];
+  return `
+    <div class="loan-card">
+      <div class="loan-head">
+        <div>
+          <h3>${escapeHtml(l.borrower)}</h3>
+          <div class="loan-meta">Lent ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · ${l.installments.length} EMIs (${l.freq})${l.rate ? ' · ' + l.rate + '%/mo interest' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}</div>
+        </div>
+        <div class="card-actions">
+          ${l.phone ? `<button class="icon-btn" title="Call ${escapeHtml(l.borrower)}" onclick="callNumber('${escapeHtml(l.phone)}')">${ICONS.phone}</button>` : ''}
+          <button class="icon-btn" title="Share loan details" onclick="shareLoanDetails('lent','${l.id}')">${ICONS.share}</button>
+          <button class="icon-btn" title="Delete loan" onclick="deleteLoan('${l.id}')">${ICONS.trash}</button>
+        </div>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="loan-figures">
+        <span>Collected <b>${fmtMoney(collected)}</b></span>
+        <span>Outstanding <b>${fmtMoney(total-collected)}</b></span>
+        ${nextPending ? `<span>Next due <b>${fmtDateShort(nextPending.due)}</b></span>` : `<span style="color:var(--income)">Fully collected</span>`}
+      </div>
+      <button class="toggle-sched" onclick="toggleSchedule('lent-${l.id}')">${isOpen ? 'Hide schedule' : 'View EMI schedule'}</button>
+      <div class="schedule ${isOpen?'open':''}">
+        ${l.installments.map((inst,idx) => scheduleRow(l.id, inst, idx, 'lent')).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function borrowCard(l){
+  const total = l.installments.reduce((s,i)=>s+Number(i.amount),0);
+  const paid = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
+  const pct = total ? Math.round((paid/total)*100) : 0;
+  const nextPending = l.installments.find(i=>i.status==='pending');
+  const isOpen = !!openSchedules['borrow-'+l.id];
+  return `
+    <div class="loan-card">
+      <div class="loan-head">
+        <div>
+          <h3>${escapeHtml(l.lender)}</h3>
+          <div class="loan-meta">Borrowed ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · ${l.installments.length} EMIs (${l.freq})${l.rate ? ' · ' + l.rate + '%/mo interest' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}</div>
+        </div>
+        <div class="card-actions">
+          ${l.phone ? `<button class="icon-btn" title="Call ${escapeHtml(l.lender)}" onclick="callNumber('${escapeHtml(l.phone)}')">${ICONS.phone}</button>` : ''}
+          <button class="icon-btn" title="Share loan details" onclick="shareLoanDetails('borrow','${l.id}')">${ICONS.share}</button>
+          <button class="icon-btn" title="Delete loan" onclick="deleteBorrowing('${l.id}')">${ICONS.trash}</button>
+        </div>
+      </div>
+      <div class="progress-track"><div class="progress-fill pay" style="width:${pct}%"></div></div>
+      <div class="loan-figures">
+        <span>Paid <b>${fmtMoney(paid)}</b></span>
+        <span>Remaining <b>${fmtMoney(total-paid)}</b></span>
+        ${nextPending ? `<span>Next due <b>${fmtDateShort(nextPending.due)}</b></span>` : `<span style="color:var(--income)">Fully paid off</span>`}
+      </div>
+      <button class="toggle-sched pay" onclick="toggleSchedule('borrow-${l.id}')">${isOpen ? 'Hide schedule' : 'View EMI schedule'}</button>
+      <div class="schedule ${isOpen?'open':''}">
+        ${l.installments.map((inst,idx) => scheduleRow(l.id, inst, idx, 'borrow')).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function scheduleRow(loanId, inst, idx, kind){
+  const st = installmentStatus(inst);
+  const labelMap = { overdue:'overdue', due:'due soon', upcoming:'upcoming', paid:'paid' };
+  const markFn = kind==='lent' ? `markInstallmentPaid('${loanId}','${inst.id}')` : `markBorrowInstallmentPaid('${loanId}','${inst.id}')`;
+  const unmarkFn = kind==='lent' ? `unmarkInstallmentPaid('${loanId}','${inst.id}')` : `unmarkBorrowInstallmentPaid('${loanId}','${inst.id}')`;
+  const doneLabel = kind==='lent' ? 'Collected' : 'Paid';
+  return `
+    <div class="sched-row">
+      <span style="width:18px;color:var(--muted)">${idx+1}</span>
+      <span class="sd">${fmtDateShort(inst.due)}</span>
+      <span class="sa">${fmtMoney(inst.amount)}</span>
+      <span class="stamp ${st}">${labelMap[st]}</span>
+      <span style="flex:1"></span>
+      ${inst.status==='pending'
+        ? `<button class="btn btn-sm" onclick="${markFn}">${doneLabel}</button>`
+        : `<button class="btn btn-sm" onclick="${unmarkFn}">Undo</button>`}
+    </div>`;
+}
+
+function toggleSchedule(key){ openSchedules[key] = !openSchedules[key]; render(); }
+
+function renderReports(){
+  const months = [];
+  for(let i=5;i>=0;i--){
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-i);
+    months.push({ key: d.toISOString().slice(0,7), label: d.toLocaleDateString('en-IN',{month:'short'}) });
+  }
+  const byMonth = months.map(m => {
+    let income=0, expense=0;
+    state.transactions.forEach(t => { if(t.date.slice(0,7)===m.key){ if(t.type==='income') income+=Number(t.amount); else expense+=Number(t.amount); } });
+    return { ...m, income, expense };
+  });
+  const maxVal = Math.max(1, ...byMonth.flatMap(m=>[m.income,m.expense]));
+
+  const catTotals = {};
+  state.transactions.forEach(t => { if(t.type==='expense'){ catTotals[t.category] = (catTotals[t.category]||0) + Number(t.amount); } });
+  const cats = Object.entries(catTotals).sort((a,b)=>b[1]-a[1]);
+  const maxCat = Math.max(1, ...cats.map(c=>c[1]));
+  const t = totals();
+
+  return `
+    <div class="page-head"><p>The last six months, and where your money goes.</p></div>
+    <section class="block">
+      <div class="block-title"><h2>Income vs expense</h2></div>
+      <div class="panel" style="padding-top:16px">
+        <div class="legend">
+          <span><i style="background:var(--income)"></i>Income</span>
+          <span><i style="background:var(--expense)"></i>Expense</span>
+        </div>
+        <div class="bars">
+          ${byMonth.map(m => `
+            <div class="bar-col">
+              <div class="bar-pair">
+                <div class="bar income-bar" style="height:${Math.max(2,(m.income/maxVal)*110)}px" title="Income ${fmtMoney(m.income)}"></div>
+                <div class="bar expense-bar" style="height:${Math.max(2,(m.expense/maxVal)*110)}px" title="Expense ${fmtMoney(m.expense)}"></div>
+              </div>
+              <div class="bl">${m.label}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </section>
+    <section class="block">
+      <div class="block-title"><h2>Expense by category</h2></div>
+      <div class="panel">
+        ${cats.length ? cats.map(([name,val]) => `
+          <div class="cat-row">
+            <div class="cn">${escapeHtml(name)}</div>
+            <div class="cat-track"><div class="cat-fill" style="width:${(val/maxCat)*100}%"></div></div>
+            <div class="cat-amt num">${fmtMoney(val)}</div>
+          </div>`).join('') : `<div class="empty">No expenses recorded yet.</div>`}
+      </div>
+    </section>
+    <section class="block">
+      <div class="block-title"><h2>Lending &amp; borrowing summary</h2></div>
+      <div class="cards" style="margin-bottom:0">
+        <div class="card"><div class="card-label">Total lent</div><div class="card-value num">${fmtMoney(t.lentTotal)}</div></div>
+        <div class="card"><div class="card-label">Collected</div><div class="card-value num income-text">${fmtMoney(t.collected)}</div></div>
+        <div class="card"><div class="card-label">Owed to you</div><div class="card-value num loan-text">${fmtMoney(t.outstanding)}</div></div>
+        <div class="card"><div class="card-label">Total borrowed</div><div class="card-value num">${fmtMoney(t.owedTotal)}</div></div>
+        <div class="card"><div class="card-label">Paid back</div><div class="card-value num">${fmtMoney(t.paidBack)}</div></div>
+        <div class="card"><div class="card-label">You still owe</div><div class="card-value num expense-text">${fmtMoney(t.owedOutstanding)}</div></div>
+      </div>
+    </section>
+  `;
+}
+
+// ---- Modals / sheets ----
+function closeModal(){ document.getElementById('modal-root').innerHTML = ''; }
+
+function openSettingsSheet(){
+  document.getElementById('modal-root').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal settings-sheet">
+        <div class="sheet-handle"></div>
+        <h2>Settings</h2>
+        <button class="opt danger" onclick="confirmClearAll()">${ICONS.trash} Clear all data</button>
+        <button class="opt" onclick="closeModal()">Close</button>
+      </div>
+    </div>`;
+}
+
+let newTxType = 'expense';
+function openTransactionModal(){
+  newTxType = 'expense';
+  document.getElementById('modal-root').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <div class="sheet-handle"></div>
+        <h2>Add transaction</h2>
+        <form onsubmit="submitTransaction(event)">
+          <div class="type-toggle">
+            <button type="button" id="ttInc" class="sel-income" onclick="setTxType('income')">Income</button>
+            <button type="button" id="ttExp" class="sel-expense on" onclick="setTxType('expense')">Expense</button>
+          </div>
+          <div class="field"><label for="txAmount">Amount</label><input id="txAmount" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0"></div>
+          <div class="field"><label for="txCategory">Category</label><input id="txCategory" type="text" required placeholder="e.g. Groceries, Salary, Rent"></div>
+          <div class="field"><label for="txDate">Date</label><input id="txDate" type="date" value="${todayISO()}" required></div>
+          <div class="field"><label for="txNote">Note (optional)</label><input id="txNote" type="text" placeholder="Any detail worth remembering"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+}
+function setTxType(t){
+  newTxType = t;
+  document.getElementById('ttInc').classList.toggle('on', t==='income');
+  document.getElementById('ttExp').classList.toggle('on', t==='expense');
+}
+function submitTransaction(e){
+  e.preventDefault();
+  const amount = Number(document.getElementById('txAmount').value);
+  const category = document.getElementById('txCategory').value.trim() || 'Uncategorised';
+  const date = document.getElementById('txDate').value || todayISO();
+  const note = document.getElementById('txNote').value.trim();
+  if(!amount || amount<=0) return;
+  state.transactions.push({ id: uid(), type: newTxType, amount, category, date, note });
+  saveState();
+  closeModal();
+  render();
+}
+function deleteTransaction(id){
+  if(!confirm('Delete this transaction?')) return;
+  state.transactions = state.transactions.filter(t=>t.id!==id);
+  saveState();
+  render();
+}
+
+function openLoanModal(){
+  document.getElementById('modal-root').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <div class="sheet-handle"></div>
+        <h2>Loan given</h2>
+        <form onsubmit="submitLoan(event)">
+          <div class="field-row" style="margin-bottom:13px">
+            <div class="field"><label for="lnBorrower">Borrower's name</label><input id="lnBorrower" type="text" required placeholder="Who are you lending to?"></div>
+            <button type="button" class="pick-contact" id="lnPickBtn" onclick="pickContact('ln')" title="Pick from contacts" aria-label="Pick from contacts">${ICONS.contact}</button>
+          </div>
+          <div class="field"><label for="lnPhone">Phone number (optional)</label><input id="lnPhone" type="tel" placeholder="For calling or sharing details"></div>
+          <div class="grid2">
+            <div class="field"><label for="lnPrincipal">Amount lent</label><input id="lnPrincipal" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0" oninput="updateEmiPreview('ln')"></div>
+            <div class="field"><label for="lnRate">Interest rate (%/mo)</label><input id="lnRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional, e.g. 5" oninput="updateEmiPreview('ln')"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="lnFreq">Frequency</label>
+              <select id="lnFreq" onchange="updateEmiPreview('ln')"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="yearly">Yearly</option></select>
+            </div>
+            <div class="field"><label for="lnStart">Start date</label><input id="lnStart" type="date" value="${todayISO()}" required></div>
+          </div>
+          <div class="emi-preview" id="lnEmiPreview">Enter the amount and interest rate to see the EMI.</div>
+          <button type="button" class="calc-link" onclick="calcEmi('ln')">Use this EMI</button>
+          <div class="grid2">
+            <div class="field"><label for="lnEmi">EMI amount</label><input id="lnEmi" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0"></div>
+            <div class="field"><label for="lnCount">Number of EMIs</label><input id="lnCount" type="number" inputmode="numeric" min="1" step="1" required placeholder="e.g. 6"></div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save loan</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  hidePickButtonsIfUnsupported();
+}
+function submitLoan(e){
+  e.preventDefault();
+  const borrower = document.getElementById('lnBorrower').value.trim();
+  const phone = document.getElementById('lnPhone').value.trim();
+  const principal = Number(document.getElementById('lnPrincipal').value);
+  const rate = Number(document.getElementById('lnRate').value) || 0;
+  const emiAmount = Number(document.getElementById('lnEmi').value);
+  const freq = document.getElementById('lnFreq').value;
+  const count = Number(document.getElementById('lnCount').value);
+  const start = document.getElementById('lnStart').value || todayISO();
+  if(!borrower || !principal || !emiAmount || !count) return;
+  const installments = generateSchedule(start, emiAmount, freq, count);
+  state.loans.push({ id: uid(), borrower, phone, principal, rate, emiAmount, freq, count, start, installments });
+  saveState();
+  closeModal();
+  loansTab = 'lent';
+  render();
+}
+function deleteLoan(id){
+  if(!confirm('Delete this loan and its EMI schedule?')) return;
+  state.loans = state.loans.filter(l=>l.id!==id);
+  saveState();
+  render();
+}
+function markInstallmentPaid(loanId, instId){
+  const loan = state.loans.find(l=>l.id===loanId);
+  if(!loan) return;
+  const inst = loan.installments.find(i=>i.id===instId);
+  if(!inst) return;
+  inst.status = 'paid';
+  inst.paidDate = todayISO();
+  state.transactions.push({ id: uid(), type:'income', amount: Number(inst.amount), category:'EMI collection', date: todayISO(), note: loan.borrower });
+  saveState();
+  render();
+}
+function unmarkInstallmentPaid(loanId, instId){
+  const loan = state.loans.find(l=>l.id===loanId);
+  if(!loan) return;
+  const inst = loan.installments.find(i=>i.id===instId);
+  if(!inst) return;
+  inst.status = 'pending';
+  inst.paidDate = null;
+  saveState();
+  render();
+}
+
+function openBorrowModal(){
+  document.getElementById('modal-root').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <div class="sheet-handle"></div>
+        <h2>Loan taken</h2>
+        <form onsubmit="submitBorrow(event)">
+          <div class="field-row" style="margin-bottom:13px">
+            <div class="field"><label for="brLender">Lender / bank name</label><input id="brLender" type="text" required placeholder="e.g. HDFC car loan, Ramesh"></div>
+            <button type="button" class="pick-contact" id="brPickBtn" onclick="pickContact('br')" title="Pick from contacts" aria-label="Pick from contacts">${ICONS.contact}</button>
+          </div>
+          <div class="field"><label for="brPhone">Phone number (optional)</label><input id="brPhone" type="tel" placeholder="For calling or sharing details"></div>
+          <div class="grid2">
+            <div class="field"><label for="brPrincipal">Loan amount</label><input id="brPrincipal" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0" oninput="updateEmiPreview('br')"></div>
+            <div class="field"><label for="brRate">Interest rate (%/mo)</label><input id="brRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional" oninput="updateEmiPreview('br')"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="brFreq">Frequency</label>
+              <select id="brFreq" onchange="updateEmiPreview('br')"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="yearly">Yearly</option></select>
+            </div>
+            <div class="field"><label for="brStart">Start date</label><input id="brStart" type="date" value="${todayISO()}" required></div>
+          </div>
+          <div class="emi-preview" id="brEmiPreview">Enter the amount and interest rate to see the EMI.</div>
+          <button type="button" class="calc-link" onclick="calcEmi('br')">Use this EMI</button>
+          <div class="grid2">
+            <div class="field"><label for="brEmi">EMI amount</label><input id="brEmi" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="e.g. 18000"></div>
+            <div class="field"><label for="brCount">Number of EMIs</label><input id="brCount" type="number" inputmode="numeric" min="1" step="1" required placeholder="e.g. 36"></div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save loan</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  hidePickButtonsIfUnsupported();
+}
+function submitBorrow(e){
+  e.preventDefault();
+  const lender = document.getElementById('brLender').value.trim();
+  const phone = document.getElementById('brPhone').value.trim();
+  const principal = Number(document.getElementById('brPrincipal').value);
+  const rate = Number(document.getElementById('brRate').value) || 0;
+  const emiAmount = Number(document.getElementById('brEmi').value);
+  const freq = document.getElementById('brFreq').value;
+  const count = Number(document.getElementById('brCount').value);
+  const start = document.getElementById('brStart').value || todayISO();
+  if(!lender || !principal || !emiAmount || !count) return;
+  const installments = generateSchedule(start, emiAmount, freq, count);
+  state.borrowings.push({ id: uid(), lender, phone, principal, rate, emiAmount, freq, count, start, installments });
+  saveState();
+  closeModal();
+  loansTab = 'borrowed';
+  render();
+}
+function deleteBorrowing(id){
+  if(!confirm('Delete this loan and its EMI schedule?')) return;
+  state.borrowings = state.borrowings.filter(l=>l.id!==id);
+  saveState();
+  render();
+}
+function markBorrowInstallmentPaid(loanId, instId){
+  const loan = state.borrowings.find(l=>l.id===loanId);
+  if(!loan) return;
+  const inst = loan.installments.find(i=>i.id===instId);
+  if(!inst) return;
+  inst.status = 'paid';
+  inst.paidDate = todayISO();
+  state.transactions.push({ id: uid(), type:'expense', amount: Number(inst.amount), category:'EMI payment', date: todayISO(), note: loan.lender });
+  saveState();
+  render();
+}
+function unmarkBorrowInstallmentPaid(loanId, instId){
+  const loan = state.borrowings.find(l=>l.id===loanId);
+  if(!loan) return;
+  const inst = loan.installments.find(i=>i.id===instId);
+  if(!inst) return;
+  inst.status = 'pending';
+  inst.paidDate = null;
+  saveState();
+  render();
+}
+
+function confirmClearAll(){
+  if(!confirm('This clears every transaction and loan. This cannot be undone. Continue?')) return;
+  state = { transactions: [], loans: [], borrowings: [] };
+  saveState();
+  render();
+}
+
+function computeEmi(principal, rate, freq){
+  let periodRate = rate;
+  if(freq === 'weekly') periodRate = rate * 12 / 52;
+  else if(freq === 'yearly') periodRate = rate * 12;
+  return Math.round(principal * periodRate / 100);
+}
+function updateEmiPreview(prefix){
+  const principal = Number(document.getElementById(prefix + 'Principal').value);
+  const rate = Number(document.getElementById(prefix + 'Rate').value);
+  const freq = document.getElementById(prefix + 'Freq').value;
+  const box = document.getElementById(prefix + 'EmiPreview');
+  if(!box) return;
+  if(!principal || !rate){ box.textContent = 'Enter the amount and interest rate to see the EMI.'; return; }
+  const emi = computeEmi(principal, rate, freq);
+  box.innerHTML = `Estimated EMI: <b>₹${emi.toLocaleString('en-IN')}</b> per ${freq==='monthly'?'month':freq==='weekly'?'week':'year'}, at ${rate}%/month on ₹${principal.toLocaleString('en-IN')}.`;
+}
+function calcEmi(prefix){
+  const principal = Number(document.getElementById(prefix + 'Principal').value);
+  const rate = Number(document.getElementById(prefix + 'Rate').value);
+  const freq = document.getElementById(prefix + 'Freq').value;
+  if(!principal || !rate){ alert('Enter the amount and the monthly interest rate first.'); return; }
+  document.getElementById(prefix + 'Emi').value = computeEmi(principal, rate, freq);
+}
+
+const hasContactPicker = ('contacts' in navigator && 'ContactsManager' in window);
+async function pickContact(prefix){
+  if(!hasContactPicker){ alert("Your phone's browser doesn't support picking contacts directly. You can still type the name and number in by hand."); return; }
+  try{
+    const props = ['name','tel'];
+    const [contact] = await navigator.contacts.select(props, { multiple:false });
+    if(!contact) return;
+    const nameField = document.getElementById(prefix + (prefix==='ln' ? 'Borrower' : 'Lender'));
+    const phoneField = document.getElementById(prefix + 'Phone');
+    if(contact.name && contact.name[0] && nameField) nameField.value = contact.name[0];
+    if(contact.tel && contact.tel[0] && phoneField) phoneField.value = contact.tel[0];
+  }catch(err){ /* user cancelled the picker */ }
+}
+function hidePickButtonsIfUnsupported(){
+  if(hasContactPicker) return;
+  const ln = document.getElementById('lnPickBtn');
+  const br = document.getElementById('brPickBtn');
+  if(ln) ln.style.display = 'none';
+  if(br) br.style.display = 'none';
+}
+
+function callNumber(phone){
+  if(!phone) return;
+  window.location.href = 'tel:' + phone.replace(/\s+/g,'');
+}
+function shareLoanDetails(kind, id){
+  const list = kind==='lent' ? state.loans : state.borrowings;
+  const l = list.find(x=>x.id===id);
+  if(!l) return;
+  const name = kind==='lent' ? l.borrower : l.lender;
+  const total = l.installments.reduce((s,i)=>s+Number(i.amount),0);
+  const done = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
+  const next = l.installments.find(i=>i.status==='pending');
+  const lines = kind==='lent'
+    ? [
+        `Loan given to ${name}`,
+        `Principal: ${fmtMoney(l.principal)}${l.rate ? ' at ' + l.rate + '%/month' : ''}`,
+        `EMI: ${fmtMoney(l.emiAmount)} (${l.freq})`,
+        `Collected so far: ${fmtMoney(done)}`,
+        `Outstanding: ${fmtMoney(total-done)}`,
+        next ? `Next EMI due: ${fmtDate(next.due)}` : 'Fully collected'
+      ]
+    : [
+        `Loan taken from ${name}`,
+        `Principal: ${fmtMoney(l.principal)}${l.rate ? ' at ' + l.rate + '%/month' : ''}`,
+        `EMI: ${fmtMoney(l.emiAmount)} (${l.freq})`,
+        `Paid so far: ${fmtMoney(done)}`,
+        `Remaining: ${fmtMoney(total-done)}`,
+        next ? `Next EMI due: ${fmtDate(next.due)}` : 'Fully paid off'
+      ];
+  const text = lines.join('\n');
+  if(navigator.share){
+    navigator.share({ title: 'Loan details', text }).catch(()=>{});
+  }else if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>alert('Loan details copied. Paste them anywhere to share.'));
+  }else{
+    alert(text);
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+loadState();
+</script>
+</body>
+</html>
