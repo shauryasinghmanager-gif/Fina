@@ -79,6 +79,8 @@
 
   .ledger-row{display:flex;align-items:center;gap:8px;padding:13px 0;border-bottom:1px dashed var(--line)}
   .ledger-row:last-child{border-bottom:none}
+  .date-group-header{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:14px 2px 6px}
+  .date-group-header:first-child{padding-top:6px}
   .lr-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
   .lr-main{flex:1 1 auto;min-width:0}
   .lr-label{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -136,6 +138,7 @@
   .cat-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .type-toggle button.sel-income.on{background:var(--income-bg);color:var(--income);border-color:var(--income)}
   .type-toggle button.sel-expense.on{background:var(--expense-bg);color:var(--expense);border-color:var(--expense)}
+  .type-toggle button.sel-loan.on{background:var(--loan-bg);color:var(--loan);border-color:var(--loan)}
   .modal-actions{display:flex;gap:10px;margin-top:4px}
   .modal-actions button{flex:1;min-height:46px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -167,11 +170,12 @@
 <div id="app"><div class="loading-screen">Opening the ledger…</div></div>
 <script>
 const STORAGE_KEY = 'ledgerlend:data:v2';
-let state = { transactions: [], loans: [], borrowings: [] };
+let state = { transactions: [], loans: [], borrowings: [], bhandara: { ledger: [] } };
 let currentView = 'dashboard';
 let loansTab = 'lent';
 let openSchedules = {};
 let txFilter = 'all';
+let txPeriod = 'all';
 
 const ICONS = {
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="12" width="8" height="9" rx="1.5"/><rect x="3" y="14" width="8" height="7" rx="1.5"/></svg>',
@@ -186,7 +190,8 @@ const ICONS = {
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
   phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M4 4h4l1.5 4.5-2.2 1.8a13 13 0 006.4 6.4l1.8-2.2 4.5 1.5v4a2 2 0 01-2.2 2A17 17 0 013 6.2 2 2 0 014 4z"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="18" cy="5" r="2.4"/><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="19" r="2.4"/><path d="M8.2 10.8l7.6-4.6M8.2 13.2l7.6 4.6"/></svg>',
-  contact: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3-6.2 7-6.2s7 2.6 7 6.2"/></svg>'
+  contact: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3-6.2 7-6.2s7 2.6 7 6.2"/></svg>',
+  bhandara: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M3 9l2.5-5h13L21 9"/><circle cx="12" cy="14.5" r="1.9"/><path d="M12 12.6V11"/></svg>'
 };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -201,6 +206,51 @@ function fmtDateShort(iso){
   return d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
 }
 function daysBetween(a,b){ return Math.round((new Date(b) - new Date(a)) / 86400000); }
+function fmtTime(hhmm){
+  if(!hhmm) return '';
+  const [h,m] = hhmm.split(':').map(Number);
+  const period = h>=12 ? 'PM' : 'AM';
+  const h12 = h%12===0 ? 12 : h%12;
+  return `${h12}:${String(m).padStart(2,'0')} ${period}`;
+}
+function nowTimeHHMM(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function periodRange(period){
+  const today = new Date(todayISO()+'T00:00:00');
+  if(period==='today') return { start: todayISO(), end: todayISO() };
+  if(period==='week'){
+    const day = today.getDay();
+    const diffToMonday = (day===0 ? 6 : day-1);
+    const monday = new Date(today); monday.setDate(today.getDate()-diffToMonday);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+    return { start: monday.toISOString().slice(0,10), end: sunday.toISOString().slice(0,10) };
+  }
+  if(period==='month'){
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    const end = new Date(today.getFullYear(), today.getMonth()+1, 0);
+    return { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
+  }
+  return null;
+}
+function inPeriod(dateStr, period){
+  const range = periodRange(period);
+  if(!range) return true;
+  return dateStr >= range.start && dateStr <= range.end;
+}
+function groupByDate(list){
+  const groups = [];
+  let last = null;
+  list.forEach(item => {
+    if(!last || last.date !== item.date){
+      last = { date: item.date, items: [] };
+      groups.push(last);
+    }
+    last.items.push(item);
+  });
+  return groups;
+}
 function addMonths(iso, n){
   const d = new Date(iso + 'T00:00:00');
   d.setMonth(d.getMonth() + n);
@@ -230,6 +280,8 @@ async function loadState(){
   if(!state.transactions) state.transactions = [];
   if(!state.loans) state.loans = [];
   if(!state.borrowings) state.borrowings = [];
+  if(!state.bhandara) state.bhandara = { ledger: [] };
+  ensureInterestSchedules();
   render();
 }
 async function saveState(){
@@ -264,7 +316,8 @@ function importData(event){
       state = {
         transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
         loans: Array.isArray(parsed.loans) ? parsed.loans : [],
-        borrowings: Array.isArray(parsed.borrowings) ? parsed.borrowings : []
+        borrowings: Array.isArray(parsed.borrowings) ? parsed.borrowings : [],
+        bhandara: parsed.bhandara && Array.isArray(parsed.bhandara.ledger) ? parsed.bhandara : { ledger: [] }
       };
       saveState();
       closeModal();
@@ -289,6 +342,51 @@ function generateSchedule(start, emiAmount, freq, count){
   return list;
 }
 
+// Interest-only ("as long as they hold the principal") loans have no fixed EMI count.
+// This auto-detects and adds any interest installments that have newly fallen due
+// since the loan was created or last opened, so the person never has to add them by hand.
+function freqLabel(freq){
+  return freq === 'weekly' ? 'week' : freq === 'yearly' ? 'year' : 'month';
+}
+function periodDue(start, freq, i){
+  if(freq === 'weekly') return addDays(start, 7*i);
+  if(freq === 'yearly') return addMonths(start, 12*i);
+  return addMonths(start, i);
+}
+function ensureInterestSchedules(){
+  let changed = false;
+  const today = todayISO();
+  [...state.loans, ...state.borrowings].forEach(l => {
+    if(l.mode !== 'interest' || l.closed) return;
+    let i = l.installments.length + 1;
+    while(true){
+      const due = periodDue(l.start, l.freq, i);
+      if(due > today || i > 2000) break;
+      l.installments.push({ id: uid(), due, amount: Number(l.emiAmount), status: 'pending', paidDate: null });
+      changed = true;
+      i++;
+    }
+  });
+  if(changed) saveState();
+}
+
+function loanFigures(l){
+  if(l.mode === 'iou'){
+    const repaid = l.installments.reduce((s,i)=>s+Number(i.amount),0);
+    const outstanding = l.closed ? 0 : Math.max(0, Number(l.principal) - repaid);
+    return { collected: repaid, outstanding };
+  }
+  if(l.mode === 'interest'){
+    const interestCollected = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
+    const interestPending = l.installments.filter(i=>i.status==='pending').reduce((s,i)=>s+Number(i.amount),0);
+    const principalOutstanding = l.closed ? 0 : Number(l.principal);
+    return { collected: interestCollected, outstanding: principalOutstanding + interestPending, interestCollected, interestPending, principalOutstanding };
+  }
+  const total = l.installments.reduce((s,i)=>s+Number(i.amount),0);
+  const collected = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
+  return { collected, outstanding: total-collected, total };
+}
+
 function installmentStatus(inst){
   if(inst.status === 'paid') return 'paid';
   const d = daysBetween(todayISO(), inst.due);
@@ -300,14 +398,14 @@ function installmentStatus(inst){
 function totals(){
   let income=0, expense=0;
   state.transactions.forEach(t => { if(t.type==='income') income += Number(t.amount); else expense += Number(t.amount); });
-  let lentTotal=0, collected=0;
-  state.loans.forEach(l => { l.installments.forEach(i => { lentTotal += Number(i.amount); if(i.status==='paid') collected += Number(i.amount); }); });
-  let owedTotal=0, paidBack=0;
-  state.borrowings.forEach(l => { l.installments.forEach(i => { owedTotal += Number(i.amount); if(i.status==='paid') paidBack += Number(i.amount); }); });
+  let lentTotal=0, collected=0, outstanding=0;
+  state.loans.forEach(l => { const f = loanFigures(l); lentTotal += f.total!==undefined ? f.total : (f.collected+f.outstanding); collected += f.collected; outstanding += f.outstanding; });
+  let owedTotal=0, paidBack=0, owedOutstanding=0;
+  state.borrowings.forEach(l => { const f = loanFigures(l); owedTotal += f.total!==undefined ? f.total : (f.collected+f.outstanding); paidBack += f.collected; owedOutstanding += f.outstanding; });
   return {
     income, expense, balance: income-expense,
-    outstanding: lentTotal - collected, lentTotal, collected,
-    owedOutstanding: owedTotal - paidBack, owedTotal, paidBack
+    outstanding, lentTotal, collected,
+    owedOutstanding, owedTotal, paidBack
   };
 }
 
@@ -340,7 +438,7 @@ function setView(v){ currentView = v; render(); }
 
 function render(){
   const app = document.getElementById('app');
-  const titles = { dashboard:'Ledger & Lend', transactions:'Transactions', loans:'Loans & EMI', reports:'Reports' };
+  const titles = { dashboard:'Ledger & Lend', bhandara:'Bhandara', transactions:'Transactions', loans:'Loans & EMI', reports:'Reports' };
   app.innerHTML = `
     <div class="app-shell">
       <header class="appbar">
@@ -351,6 +449,7 @@ function render(){
       ${currentView!=='reports' ? `<button class="fab" onclick="fabAction()" aria-label="Add">${ICONS.plus}</button>` : ''}
       <nav class="bottom-nav">
         ${navBtn('dashboard','Home')}
+        ${navBtn('bhandara','Bhandara')}
         ${navBtn('transactions','Money')}
         ${navBtn('loans','Loans')}
         ${navBtn('reports','Reports')}
@@ -364,11 +463,13 @@ function navBtn(id,label){
 }
 function fabAction(){
   if(currentView==='loans') { loansTab==='lent' ? openLoanModal() : openBorrowModal(); }
+  else if(currentView==='bhandara') openBhandaraModal();
   else openTransactionModal();
 }
 
 function renderView(){
   if(currentView==='dashboard') return renderDashboard();
+  if(currentView==='bhandara') return renderBhandara();
   if(currentView==='transactions') return renderTransactions();
   if(currentView==='loans') return renderLoans();
   if(currentView==='reports') return renderReports();
@@ -378,6 +479,8 @@ function renderDashboard(){
   const t = totals();
   const due = combinedDue(5);
   const recent = [...state.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  const iouReminders = allIouOutstanding();
+  const bhBal = bhandaraBalance();
   return `
     <div class="page-head"><p>Here's where things stand today, ${fmtDate(todayISO())}.</p></div>
     <div class="cards">
@@ -386,7 +489,15 @@ function renderDashboard(){
       <div class="card"><div class="card-label">Balance</div><div class="card-value num" style="color:${t.balance>=0?'var(--income)':'var(--expense)'}">${fmtMoney(t.balance)}</div></div>
       <div class="card"><div class="card-label">Owed to you</div><div class="card-value num loan-text">${fmtMoney(t.outstanding)}</div></div>
       <div class="card" style="grid-column:1 / -1"><div class="card-label">You still owe (loans taken)</div><div class="card-value num expense-text">${fmtMoney(t.owedOutstanding)}</div></div>
+      <div class="card" style="grid-column:1 / -1;cursor:pointer" onclick="setView('bhandara')"><div class="card-label">Bhandara — cash available</div><div class="card-value num" style="color:${bhBal>=0?'var(--income)':'var(--expense)'}">${fmtMoney(bhBal)}</div></div>
     </div>
+
+    <section class="block">
+      <div class="block-title"><h2>Don't forget</h2><button class="see-all" onclick="setView('loans')">Manage</button></div>
+      <div class="panel">
+        ${iouReminders.length ? iouReminders.map(r => iouReminderRow(r)).join('') : `<div class="empty">No outstanding no-interest amounts. Add one under Loans when you lend to a friend or worker.</div>`}
+      </div>
+    </section>
 
     <section class="block">
       <div class="block-title"><h2>Due soon</h2><button class="see-all" onclick="setView('loans')">Manage</button></div>
@@ -402,6 +513,38 @@ function renderDashboard(){
       </div>
     </section>
   `;
+}
+function allIouOutstanding(){
+  const out = [];
+  state.loans.forEach(l => {
+    if(l.mode !== 'iou' || l.closed) return;
+    const f = loanFigures(l);
+    if(f.outstanding > 0) out.push({ id: l.id, kind:'lent', who: l.borrower, amount: f.outstanding, since: l.start, note: l.note });
+  });
+  state.borrowings.forEach(l => {
+    if(l.mode !== 'iou' || l.closed) return;
+    const f = loanFigures(l);
+    if(f.outstanding > 0) out.push({ id: l.id, kind:'borrowed', who: l.lender, amount: f.outstanding, since: l.start, note: l.note });
+  });
+  return out.sort((a,b)=>a.since.localeCompare(b.since));
+}
+function iouReminderRow(r){
+  const isLent = r.kind==='lent';
+  const color = isLent ? 'var(--loan)' : 'var(--expense)';
+  const verb = isLent ? 'Owes you' : 'You owe';
+  const prefix = isLent ? 'ln' : 'br';
+  return `
+    <div class="ledger-row">
+      <span class="lr-dot" style="background:${color}"></span>
+      <div class="lr-main">
+        <div class="lr-label">${escapeHtml(r.who)} · ${verb}</div>
+        <div class="lr-sub">Since ${fmtDateShort(r.since)}${r.note ? ' · ' + escapeHtml(r.note) : ''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="lr-amount num" style="color:${color}">${fmtMoney(r.amount)}</div>
+        <button class="icon-btn" title="Log repayment" onclick="openRepaymentModal('${prefix}','${r.id}')">${ICONS.check}</button>
+      </div>
+    </div>`;
 }
 
 function dueRow(p){
@@ -433,7 +576,23 @@ function txRow(tx){
       <span class="lr-dot" style="background:${isIncome?'var(--income)':'var(--expense)'}"></span>
       <div class="lr-main">
         <div class="lr-label">${escapeHtml(tx.category)}</div>
-        <div class="lr-sub">${fmtDateShort(tx.date)}${tx.note ? ' · ' + escapeHtml(tx.note) : ''}</div>
+        <div class="lr-sub">${fmtDateShort(tx.date)}${tx.time ? ', ' + fmtTime(tx.time) : ''}${tx.note ? ' · ' + escapeHtml(tx.note) : ''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="lr-amount num" style="color:${isIncome?'var(--income)':'var(--expense)'}">${isIncome?'+':'-'}${fmtMoney(tx.amount)}</div>
+        <button class="icon-btn" title="Delete" onclick="deleteTransaction('${tx.id}')">${ICONS.trash}</button>
+      </div>
+    </div>`;
+}
+
+function txRowTimeOnly(tx){
+  const isIncome = tx.type==='income';
+  return `
+    <div class="ledger-row">
+      <span class="lr-dot" style="background:${isIncome?'var(--income)':'var(--expense)'}"></span>
+      <div class="lr-main">
+        <div class="lr-label">${escapeHtml(tx.category)}</div>
+        <div class="lr-sub">${tx.time ? fmtTime(tx.time) : '—'}${tx.note ? ' · ' + escapeHtml(tx.note) : ''}</div>
       </div>
       <div style="text-align:right">
         <div class="lr-amount num" style="color:${isIncome?'var(--income)':'var(--expense)'}">${isIncome?'+':'-'}${fmtMoney(tx.amount)}</div>
@@ -445,7 +604,10 @@ function txRow(tx){
 function renderTransactions(){
   const list = state.transactions
     .filter(t => txFilter==='all' ? true : t.type===txFilter)
-    .sort((a,b)=>b.date.localeCompare(a.date));
+    .filter(t => inPeriod(t.date, txPeriod))
+    .sort((a,b)=> (b.date+(b.time||'00:00')).localeCompare(a.date+(a.time||'00:00')));
+  const groups = groupByDate(list);
+  const periodLabel = { all:'All time', today:'Today', week:'This week', month:'This month' };
   return `
     <div class="page-head"><p>Every rupee in, every rupee out.</p></div>
     <div class="tabs">
@@ -453,12 +615,177 @@ function renderTransactions(){
       <button class="tab ${txFilter==='income'?'active':''}" onclick="setTxFilter('income')">Income</button>
       <button class="tab ${txFilter==='expense'?'active':''}" onclick="setTxFilter('expense')">Expense</button>
     </div>
+    <div class="tabs">
+      <button class="tab ${txPeriod==='all'?'active':''}" onclick="setTxPeriod('all')">All time</button>
+      <button class="tab ${txPeriod==='today'?'active':''}" onclick="setTxPeriod('today')">Daily</button>
+      <button class="tab ${txPeriod==='week'?'active':''}" onclick="setTxPeriod('week')">Weekly</button>
+      <button class="tab ${txPeriod==='month'?'active':''}" onclick="setTxPeriod('month')">Monthly</button>
+    </div>
     <div class="panel">
-      ${list.length ? list.map(tx => txRow(tx)).join('') : `<div class="empty">Nothing here yet. Tap + to add your first entry.</div>`}
+      ${groups.length ? groups.map(g => `
+        <div class="date-group-header">${fmtDate(g.date)}</div>
+        ${g.items.map(tx => txRowTimeOnly(tx)).join('')}
+      `).join('') : `<div class="empty">Nothing here for ${periodLabel[txPeriod].toLowerCase()}. Tap + to add an entry.</div>`}
     </div>
   `;
 }
 function setTxFilter(f){ txFilter = f; render(); }
+function setTxPeriod(p){ txPeriod = p; render(); }
+
+function bhandaraBalance(){
+  return state.bhandara.ledger.reduce((s,e) => s + (e.type==='in' ? Number(e.amount) : -Number(e.amount)), 0);
+}
+let bhFilter = 'all';
+let bhPeriod = 'all';
+function setBhFilter(f){ bhFilter = f; render(); }
+function setBhPeriod(p){ bhPeriod = p; render(); }
+function bhandaraRowTimeOnly(e){
+  const isIn = e.type==='in';
+  return `
+    <div class="ledger-row">
+      <span class="lr-dot" style="background:${isIn?'var(--income)':'var(--expense)'}"></span>
+      <div class="lr-main">
+        <div class="lr-label">${escapeHtml(e.category || (isIn ? 'Added to Bhandara' : 'Taken from Bhandara'))}</div>
+        <div class="lr-sub">${e.time ? fmtTime(e.time) : '—'}${e.note ? ' · ' + escapeHtml(e.note) : ''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="lr-amount num" style="color:${isIn?'var(--income)':'var(--expense)'}">${isIn?'+':'-'}${fmtMoney(e.amount)}</div>
+        <button class="icon-btn" title="Delete" onclick="deleteBhandaraEntry('${e.id}')">${ICONS.trash}</button>
+      </div>
+    </div>`;
+}
+function renderBhandara(){
+  const bal = bhandaraBalance();
+  const inTotal = state.bhandara.ledger.filter(e=>e.type==='in').reduce((s,e)=>s+Number(e.amount),0);
+  const outTotal = state.bhandara.ledger.filter(e=>e.type==='out').reduce((s,e)=>s+Number(e.amount),0);
+  const list = state.bhandara.ledger
+    .filter(e => bhFilter==='all' ? true : e.type===bhFilter)
+    .filter(e => inPeriod(e.date, bhPeriod))
+    .sort((a,b)=> (b.date+(b.time||'00:00')).localeCompare(a.date+(a.time||'00:00')));
+  const groups = groupByDate(list);
+  const periodLabel = { all:'All time', today:'Today', week:'This week', month:'This month' };
+  return `
+    <div class="page-head"><p>Your home cash box — what's in it, and where it's gone.</p></div>
+    <div class="cards">
+      <div class="card" style="grid-column:1 / -1"><div class="card-label">Cash in Bhandara</div><div class="card-value num" style="color:${bal>=0?'var(--income)':'var(--expense)'}">${fmtMoney(bal)}</div></div>
+      <div class="card"><div class="card-label">Added</div><div class="card-value num income-text">${fmtMoney(inTotal)}</div></div>
+      <div class="card"><div class="card-label">Spent / taken</div><div class="card-value num expense-text">${fmtMoney(outTotal)}</div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab ${bhFilter==='all'?'active':''}" onclick="setBhFilter('all')">All</button>
+      <button class="tab ${bhFilter==='in'?'active':''}" onclick="setBhFilter('in')">Added</button>
+      <button class="tab ${bhFilter==='out'?'active':''}" onclick="setBhFilter('out')">Spent / taken</button>
+    </div>
+    <div class="tabs">
+      <button class="tab ${bhPeriod==='all'?'active':''}" onclick="setBhPeriod('all')">All time</button>
+      <button class="tab ${bhPeriod==='today'?'active':''}" onclick="setBhPeriod('today')">Daily</button>
+      <button class="tab ${bhPeriod==='week'?'active':''}" onclick="setBhPeriod('week')">Weekly</button>
+      <button class="tab ${bhPeriod==='month'?'active':''}" onclick="setBhPeriod('month')">Monthly</button>
+    </div>
+    <div class="panel">
+      ${groups.length ? groups.map(g => `
+        <div class="date-group-header">${fmtDate(g.date)}</div>
+        ${g.items.map(e => bhandaraRowTimeOnly(e)).join('')}
+      `).join('') : `<div class="empty">Nothing here for ${periodLabel[bhPeriod].toLowerCase()}. Tap + to add cash in or log a spend.</div>`}
+    </div>
+  `;
+}
+function bhandaraRow(e){
+  const isIn = e.type==='in';
+  return `
+    <div class="ledger-row">
+      <span class="lr-dot" style="background:${isIn?'var(--income)':'var(--expense)'}"></span>
+      <div class="lr-main">
+        <div class="lr-label">${escapeHtml(e.category || (isIn ? 'Added to Bhandara' : 'Taken from Bhandara'))}</div>
+        <div class="lr-sub">${fmtDateShort(e.date)}${e.time ? ', ' + fmtTime(e.time) : ''}${e.note ? ' · ' + escapeHtml(e.note) : ''}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="lr-amount num" style="color:${isIn?'var(--income)':'var(--expense)'}">${isIn?'+':'-'}${fmtMoney(e.amount)}</div>
+        <button class="icon-btn" title="Delete" onclick="deleteBhandaraEntry('${e.id}')">${ICONS.trash}</button>
+      </div>
+    </div>`;
+}
+let bhType = 'in';
+function openBhandaraModal(){
+  bhType = 'in';
+  document.getElementById('modal-root').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <div class="sheet-handle"></div>
+        <h2>Bhandara entry</h2>
+        <form onsubmit="submitBhandara(event)">
+          <div class="type-toggle">
+            <button type="button" id="bhTypeIn" class="sel-income on" onclick="setBhType('in')">Add money</button>
+            <button type="button" id="bhTypeOut" class="sel-expense" onclick="setBhType('out')">Spend / take out</button>
+          </div>
+          <div class="field"><label for="bhAmount">Amount</label><input id="bhAmount" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this)"></div>
+          <div class="field">
+            <label for="bhCategory">Category (optional)</label>
+            <input id="bhCategory" type="text" list="bhCategoryList" placeholder="e.g. Groceries, Milkman, Savings" oninput="highlightActiveChip('bhChips')">
+            <datalist id="bhCategoryList"></datalist>
+            <div class="cat-chips" id="bhChips"></div>
+          </div>
+          <div class="field"><label for="bhDate">Date</label><input id="bhDate" type="date" value="${todayISO()}" required></div>
+          <div class="field"><label for="bhNote">Note (optional)</label><input id="bhNote" type="text" placeholder="Any detail worth remembering"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  renderBhandaraSuggestions();
+}
+function setBhType(t){
+  bhType = t;
+  document.getElementById('bhTypeIn').classList.toggle('on', t==='in');
+  document.getElementById('bhTypeOut').classList.toggle('on', t==='out');
+  document.getElementById('bhCategory').value = '';
+  renderBhandaraSuggestions();
+}
+function getBhandaraSuggestions(type){
+  const counts = {};
+  state.bhandara.ledger.filter(e=>e.type===type).forEach(e=>{
+    const key = (e.category||'').trim();
+    if(!key) return;
+    counts[key] = (counts[key]||0) + 1;
+  });
+  const usedSorted = Object.keys(counts).sort((a,b)=> counts[b]-counts[a] || a.localeCompare(b));
+  const base = type==='in' ? ['Bank withdrawal','Savings','Cash gift','Salary cash'] : (CATEGORY_SUGGESTIONS.expense || []);
+  const seen = new Set(usedSorted.map(c=>c.toLowerCase()));
+  const rest = base.filter(c=>!seen.has(c.toLowerCase()));
+  return [...usedSorted, ...rest].slice(0, 12);
+}
+function renderBhandaraSuggestions(){
+  const list = getBhandaraSuggestions(bhType);
+  const dl = document.getElementById('bhCategoryList');
+  const chips = document.getElementById('bhChips');
+  if(dl) dl.innerHTML = list.map(c=>`<option value="${escapeHtml(c)}"></option>`).join('');
+  if(chips) chips.innerHTML = list.slice(0,8).map(c=>`<button type="button" class="cat-chip" data-cat="${escapeHtml(c)}" onclick="pickBhandaraCategory('${escapeHtml(c).replace(/'/g,"\\'")}')">${escapeHtml(c)}</button>`).join('');
+  highlightActiveChip('bhChips');
+}
+function pickBhandaraCategory(c){
+  document.getElementById('bhCategory').value = c;
+  highlightActiveChip('bhChips');
+}
+function submitBhandara(e){
+  e.preventDefault();
+  const amount = parseAmount(document.getElementById('bhAmount').value);
+  const category = document.getElementById('bhCategory').value.trim();
+  const date = document.getElementById('bhDate').value || todayISO();
+  const note = document.getElementById('bhNote').value.trim();
+  if(!amount || amount<=0) return;
+  state.bhandara.ledger.push({ id: uid(), type: bhType, amount, category, date, note, time: nowTimeHHMM() });
+  saveState();
+  closeModal();
+  render();
+}
+function deleteBhandaraEntry(id){
+  if(!confirm('Delete this Bhandara entry?')) return;
+  state.bhandara.ledger = state.bhandara.ledger.filter(e=>e.id!==id);
+  saveState();
+  render();
+}
 
 function setLoansTab(t){ loansTab = t; render(); }
 
@@ -483,17 +810,23 @@ function renderBorrowedList(){
 }
 
 function loanCard(l){
-  const total = l.installments.reduce((s,i)=>s+Number(i.amount),0);
-  const collected = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
-  const pct = total ? Math.round((collected/total)*100) : 0;
+  const isInt = l.mode === 'interest';
+  const isIou = l.mode === 'iou';
+  const f = loanFigures(l);
+  const pct = (isInt||isIou) ? (l.closed ? 100 : 0) : (f.total ? Math.round((f.collected/f.total)*100) : 0);
   const nextPending = l.installments.find(i=>i.status==='pending');
   const isOpen = !!openSchedules['lent-'+l.id];
+  const metaLine = isIou
+    ? `Lent ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · No interest${l.note ? ' · ' + escapeHtml(l.note) : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}${l.closed ? ' · Settled' : ''}`
+    : isInt
+    ? `Lent ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · Interest only, ${fmtMoney(l.emiAmount)}/${freqLabel(l.freq)}${l.rate ? ' · ' + l.rate + '%/mo' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}${l.closed ? ' · Settled' : ''}`
+    : `Lent ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · ${l.installments.length} EMIs (${l.freq})${l.rate ? ' · ' + l.rate + '%/mo interest' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}`;
   return `
     <div class="loan-card">
       <div class="loan-head">
         <div>
           <h3>${escapeHtml(l.borrower)}</h3>
-          <div class="loan-meta">Lent ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · ${l.installments.length} EMIs (${l.freq})${l.rate ? ' · ' + l.rate + '%/mo interest' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}</div>
+          <div class="loan-meta">${metaLine}</div>
         </div>
         <div class="card-actions">
           ${l.phone ? `<button class="icon-btn" title="Call ${escapeHtml(l.borrower)}" onclick="callNumber('${escapeHtml(l.phone)}')">${ICONS.phone}</button>` : ''}
@@ -503,30 +836,41 @@ function loanCard(l){
       </div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
       <div class="loan-figures">
-        <span>Collected <b>${fmtMoney(collected)}</b></span>
-        <span>Outstanding <b>${fmtMoney(total-collected)}</b></span>
-        ${nextPending ? `<span>Next due <b>${fmtDateShort(nextPending.due)}</b></span>` : `<span style="color:var(--income)">Fully collected</span>`}
+        ${isIou
+          ? `<span>Repaid <b>${fmtMoney(f.collected)}</b></span><span>Still owed <b>${fmtMoney(f.outstanding)}</b></span>`
+          : isInt
+          ? `<span>Interest collected <b>${fmtMoney(f.interestCollected)}</b></span><span>Principal held <b>${fmtMoney(f.principalOutstanding)}</b></span>`
+          : `<span>Collected <b>${fmtMoney(f.collected)}</b></span><span>Outstanding <b>${fmtMoney(f.outstanding)}</b></span>`}
+        ${l.closed ? `<span style="color:var(--income)">Settled ${fmtDateShort(l.closedDate)}</span>` : isIou ? '' : nextPending ? `<span>Next due <b>${fmtDateShort(nextPending.due)}</b></span>` : `<span style="color:var(--income)">Fully collected</span>`}
       </div>
-      <button class="toggle-sched" onclick="toggleSchedule('lent-${l.id}')">${isOpen ? 'Hide schedule' : 'View EMI schedule'}</button>
+      ${isIou && !l.closed ? `<button class="toggle-sched" onclick="openRepaymentModal('ln','${l.id}')">Log repayment</button><button class="toggle-sched" onclick="closeIouLoan('${l.id}')">Mark fully settled</button>` : ''}
+      ${isInt && !l.closed ? `<button class="toggle-sched" onclick="closeInterestLoan('${l.id}')">Settle &amp; collect principal (${fmtMoney(l.principal)})</button>` : ''}
+      <button class="toggle-sched" onclick="toggleSchedule('lent-${l.id}')">${isOpen ? 'Hide schedule' : isIou ? 'View repayment history' : (isInt ? 'View interest payments' : 'View EMI schedule')}</button>
       <div class="schedule ${isOpen?'open':''}">
-        ${l.installments.map((inst,idx) => scheduleRow(l.id, inst, idx, 'lent')).join('')}
+        ${l.installments.length ? l.installments.map((inst,idx) => isIou ? iouRepaymentRow('ln', l.id, inst, idx) : scheduleRow(l.id, inst, idx, 'lent')).join('') : `<div class="empty" style="padding:12px 0">${isIou ? 'No repayments logged yet.' : 'No interest due yet.'}</div>`}
       </div>
     </div>
   `;
 }
 
 function borrowCard(l){
-  const total = l.installments.reduce((s,i)=>s+Number(i.amount),0);
-  const paid = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
-  const pct = total ? Math.round((paid/total)*100) : 0;
+  const isInt = l.mode === 'interest';
+  const isIou = l.mode === 'iou';
+  const f = loanFigures(l);
+  const pct = (isInt||isIou) ? (l.closed ? 100 : 0) : (f.total ? Math.round((f.collected/f.total)*100) : 0);
   const nextPending = l.installments.find(i=>i.status==='pending');
   const isOpen = !!openSchedules['borrow-'+l.id];
+  const metaLine = isIou
+    ? `Borrowed ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · No interest${l.note ? ' · ' + escapeHtml(l.note) : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}${l.closed ? ' · Settled' : ''}`
+    : isInt
+    ? `Borrowed ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · Interest only, ${fmtMoney(l.emiAmount)}/${freqLabel(l.freq)}${l.rate ? ' · ' + l.rate + '%/mo' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}${l.closed ? ' · Settled' : ''}`
+    : `Borrowed ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · ${l.installments.length} EMIs (${l.freq})${l.rate ? ' · ' + l.rate + '%/mo interest' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}`;
   return `
     <div class="loan-card">
       <div class="loan-head">
         <div>
           <h3>${escapeHtml(l.lender)}</h3>
-          <div class="loan-meta">Borrowed ${fmtMoney(l.principal)} on ${fmtDate(l.start)} · ${l.installments.length} EMIs (${l.freq})${l.rate ? ' · ' + l.rate + '%/mo interest' : ''}${l.phone ? ' · ' + escapeHtml(l.phone) : ''}</div>
+          <div class="loan-meta">${metaLine}</div>
         </div>
         <div class="card-actions">
           ${l.phone ? `<button class="icon-btn" title="Call ${escapeHtml(l.lender)}" onclick="callNumber('${escapeHtml(l.phone)}')">${ICONS.phone}</button>` : ''}
@@ -536,16 +880,32 @@ function borrowCard(l){
       </div>
       <div class="progress-track"><div class="progress-fill pay" style="width:${pct}%"></div></div>
       <div class="loan-figures">
-        <span>Paid <b>${fmtMoney(paid)}</b></span>
-        <span>Remaining <b>${fmtMoney(total-paid)}</b></span>
-        ${nextPending ? `<span>Next due <b>${fmtDateShort(nextPending.due)}</b></span>` : `<span style="color:var(--income)">Fully paid off</span>`}
+        ${isIou
+          ? `<span>Paid back <b>${fmtMoney(f.collected)}</b></span><span>Still owe <b>${fmtMoney(f.outstanding)}</b></span>`
+          : isInt
+          ? `<span>Interest paid <b>${fmtMoney(f.interestCollected)}</b></span><span>Principal held <b>${fmtMoney(f.principalOutstanding)}</b></span>`
+          : `<span>Paid <b>${fmtMoney(f.collected)}</b></span><span>Remaining <b>${fmtMoney(f.outstanding)}</b></span>`}
+        ${l.closed ? `<span style="color:var(--income)">Settled ${fmtDateShort(l.closedDate)}</span>` : isIou ? '' : nextPending ? `<span>Next due <b>${fmtDateShort(nextPending.due)}</b></span>` : `<span style="color:var(--income)">Fully paid off</span>`}
       </div>
-      <button class="toggle-sched pay" onclick="toggleSchedule('borrow-${l.id}')">${isOpen ? 'Hide schedule' : 'View EMI schedule'}</button>
+      ${isIou && !l.closed ? `<button class="toggle-sched pay" onclick="openRepaymentModal('br','${l.id}')">Log repayment</button><button class="toggle-sched pay" onclick="closeIouBorrowing('${l.id}')">Mark fully settled</button>` : ''}
+      ${isInt && !l.closed ? `<button class="toggle-sched pay" onclick="closeInterestBorrowing('${l.id}')">Settle &amp; pay off principal (${fmtMoney(l.principal)})</button>` : ''}
+      <button class="toggle-sched pay" onclick="toggleSchedule('borrow-${l.id}')">${isOpen ? 'Hide schedule' : isIou ? 'View repayment history' : (isInt ? 'View interest payments' : 'View EMI schedule')}</button>
       <div class="schedule ${isOpen?'open':''}">
-        ${l.installments.map((inst,idx) => scheduleRow(l.id, inst, idx, 'borrow')).join('')}
+        ${l.installments.length ? l.installments.map((inst,idx) => isIou ? iouRepaymentRow('br', l.id, inst, idx) : scheduleRow(l.id, inst, idx, 'borrow')).join('') : `<div class="empty" style="padding:12px 0">${isIou ? 'No repayments logged yet.' : 'No interest due yet.'}</div>`}
       </div>
     </div>
   `;
+}
+
+function iouRepaymentRow(prefix, loanId, inst, idx){
+  return `
+    <div class="sched-row">
+      <span style="width:18px;color:var(--muted)">${idx+1}</span>
+      <span class="sd">${fmtDateShort(inst.due)}</span>
+      <span class="sa">${fmtMoney(inst.amount)}</span>
+      <span style="flex:1"></span>
+      <button class="icon-btn" title="Remove" onclick="deleteRepayment('${prefix}','${loanId}','${inst.id}')">${ICONS.trash}</button>
+    </div>`;
 }
 
 function scheduleRow(loanId, inst, idx, kind){
@@ -681,9 +1041,11 @@ function pickCategory(c){
   document.getElementById('txCategory').value = c;
   highlightActiveChip();
 }
-function highlightActiveChip(){
-  const val = (document.getElementById('txCategory')?.value || '').trim().toLowerCase();
-  document.querySelectorAll('#catChips .cat-chip').forEach(btn=>{
+function highlightActiveChip(chipsId){
+  chipsId = chipsId || 'catChips';
+  const inputId = chipsId === 'bhChips' ? 'bhCategory' : 'txCategory';
+  const val = (document.getElementById(inputId)?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#'+chipsId+' .cat-chip').forEach(btn=>{
     btn.classList.toggle('on', btn.dataset.cat.toLowerCase() === val);
   });
 }
@@ -746,7 +1108,7 @@ function submitTransaction(e){
   const date = document.getElementById('txDate').value || todayISO();
   const note = document.getElementById('txNote').value.trim();
   if(!amount || amount<=0) return;
-  state.transactions.push({ id: uid(), type: newTxType, amount, category, date, note });
+  state.transactions.push({ id: uid(), type: newTxType, amount, category, date, note, time: nowTimeHHMM() });
   saveState();
   closeModal();
   render();
@@ -759,6 +1121,7 @@ function deleteTransaction(id){
 }
 
 function openLoanModal(){
+  lnMode = 'emi';
   document.getElementById('modal-root').innerHTML = `
     <div class="overlay" onclick="if(event.target===this) closeModal()">
       <div class="modal">
@@ -770,22 +1133,26 @@ function openLoanModal(){
             <button type="button" class="pick-contact" id="lnPickBtn" onclick="pickContact('ln')" title="Pick from contacts" aria-label="Pick from contacts">${ICONS.contact}</button>
           </div>
           <div class="field"><label for="lnPhone">Phone number (optional)</label><input id="lnPhone" type="tel" placeholder="For calling or sharing details"></div>
-          <div class="grid2">
-            <div class="field"><label for="lnPrincipal">Amount lent</label><input id="lnPrincipal" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this);updateEmiPreview('ln')"></div>
-            <div class="field"><label for="lnRate">Interest rate (%/mo)</label><input id="lnRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional, e.g. 5" oninput="updateEmiPreview('ln')"></div>
+          <div class="type-toggle">
+            <button type="button" id="lnModeEmi" class="sel-loan on" onclick="setLoanMode('ln','emi')">Fixed EMI</button>
+            <button type="button" id="lnModeInt" class="sel-loan" onclick="setLoanMode('ln','interest')">Interest only</button>
+            <button type="button" id="lnModeIou" class="sel-loan" onclick="setLoanMode('ln','iou')">No interest</button>
           </div>
-          <div class="grid2">
+          <div class="field"><label for="lnPrincipal">Amount lent</label><input id="lnPrincipal" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this);updateEmiPreview('ln')"></div>
+          <div class="grid2" id="lnRateFreqFields">
+            <div class="field"><label for="lnRate">Interest rate (%/mo)</label><input id="lnRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional, e.g. 5" oninput="updateEmiPreview('ln')"></div>
             <div class="field"><label for="lnFreq">Frequency</label>
               <select id="lnFreq" onchange="updateEmiPreview('ln')"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="yearly">Yearly</option></select>
             </div>
-            <div class="field"><label for="lnStart">Start date</label><input id="lnStart" type="date" value="${todayISO()}" required></div>
           </div>
+          <div class="field"><label for="lnStart">Start date</label><input id="lnStart" type="date" value="${todayISO()}" required></div>
           <div class="emi-preview" id="lnEmiPreview">Enter the amount and interest rate to see the EMI.</div>
-          <button type="button" class="calc-link" onclick="calcEmi('ln')">Use this EMI</button>
-          <div class="grid2">
+          <button type="button" class="calc-link" id="lnCalcLink" onclick="calcEmi('ln')">Use this EMI</button>
+          <div class="grid2" id="lnEmiFields">
             <div class="field"><label for="lnEmi">EMI amount</label><input id="lnEmi" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this)"></div>
             <div class="field"><label for="lnCount">Number of EMIs</label><input id="lnCount" type="number" inputmode="numeric" min="1" step="1" required placeholder="e.g. 6"></div>
           </div>
+          <div class="field" id="lnNoteField" style="display:none"><label for="lnNote">What's it for? (optional)</label><input id="lnNote" type="text" placeholder="e.g. Medical help, festival advance"></div>
           <div class="modal-actions">
             <button type="button" class="btn" onclick="closeModal()">Cancel</button>
             <button type="submit" class="btn btn-primary">Save loan</button>
@@ -794,6 +1161,24 @@ function openLoanModal(){
       </div>
     </div>`;
   hidePickButtonsIfUnsupported();
+  setLoanMode('ln','emi');
+}
+let lnMode = 'emi', brMode = 'emi';
+function setLoanMode(prefix, mode){
+  if(prefix==='ln') lnMode = mode; else brMode = mode;
+  document.getElementById(prefix+'ModeEmi').classList.toggle('on', mode==='emi');
+  document.getElementById(prefix+'ModeInt').classList.toggle('on', mode==='interest');
+  document.getElementById(prefix+'ModeIou').classList.toggle('on', mode==='iou');
+  document.getElementById(prefix+'RateFreqFields').style.display = mode==='iou' ? 'none' : '';
+  document.getElementById(prefix+'EmiPreview').style.display = mode==='iou' ? 'none' : '';
+  document.getElementById(prefix+'EmiFields').style.display = mode==='emi' ? '' : 'none';
+  document.getElementById(prefix+'CalcLink').style.display = mode==='emi' ? '' : 'none';
+  document.getElementById(prefix+'NoteField').style.display = mode==='iou' ? '' : 'none';
+  const emiInput = document.getElementById(prefix+'Emi');
+  const countInput = document.getElementById(prefix+'Count');
+  emiInput.required = (mode==='emi');
+  countInput.required = (mode==='emi');
+  updateEmiPreview(prefix);
 }
 function submitLoan(e){
   e.preventDefault();
@@ -801,13 +1186,23 @@ function submitLoan(e){
   const phone = document.getElementById('lnPhone').value.trim();
   const principal = parseAmount(document.getElementById('lnPrincipal').value);
   const rate = Number(document.getElementById('lnRate').value) || 0;
-  const emiAmount = parseAmount(document.getElementById('lnEmi').value);
   const freq = document.getElementById('lnFreq').value;
-  const count = Number(document.getElementById('lnCount').value);
   const start = document.getElementById('lnStart').value || todayISO();
-  if(!borrower || !principal || !emiAmount || !count) return;
-  const installments = generateSchedule(start, emiAmount, freq, count);
-  state.loans.push({ id: uid(), borrower, phone, principal, rate, emiAmount, freq, count, start, installments });
+  if(!borrower || !principal) return;
+  if(lnMode === 'iou'){
+    const note = document.getElementById('lnNote').value.trim();
+    state.loans.push({ id: uid(), borrower, phone, principal, start, mode:'iou', closed:false, note, installments: [] });
+  } else if(lnMode === 'interest'){
+    const emiAmount = computeEmi(principal, rate, freq);
+    state.loans.push({ id: uid(), borrower, phone, principal, rate, emiAmount, freq, start, mode:'interest', closed:false, installments: [] });
+    ensureInterestSchedules();
+  } else {
+    const emiAmount = parseAmount(document.getElementById('lnEmi').value);
+    const count = Number(document.getElementById('lnCount').value);
+    if(!emiAmount || !count) return;
+    const installments = generateSchedule(start, emiAmount, freq, count);
+    state.loans.push({ id: uid(), borrower, phone, principal, rate, emiAmount, freq, count, start, mode:'emi', installments });
+  }
   saveState();
   closeModal();
   loansTab = 'lent';
@@ -816,6 +1211,80 @@ function submitLoan(e){
 function deleteLoan(id){
   if(!confirm('Delete this loan and its EMI schedule?')) return;
   state.loans = state.loans.filter(l=>l.id!==id);
+  saveState();
+  render();
+}
+function closeInterestLoan(id){
+  const loan = state.loans.find(l=>l.id===id);
+  if(!loan) return;
+  if(!confirm(`Mark this as settled? This records ${fmtMoney(loan.principal)} principal being returned to you by ${loan.borrower}.`)) return;
+  loan.closed = true;
+  loan.closedDate = todayISO();
+  state.transactions.push({ id: uid(), type:'income', amount: Number(loan.principal), category:'Principal settlement', date: todayISO(), note: loan.borrower });
+  saveState();
+  render();
+}
+function openRepaymentModal(prefix, loanId){
+  const list = prefix==='ln' ? state.loans : state.borrowings;
+  const loan = list.find(l=>l.id===loanId);
+  if(!loan) return;
+  const name = prefix==='ln' ? loan.borrower : loan.lender;
+  const f = loanFigures(loan);
+  document.getElementById('modal-root').innerHTML = `
+    <div class="overlay" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <div class="sheet-handle"></div>
+        <h2>Log repayment</h2>
+        <p style="color:var(--muted);font-size:13px;margin:-6px 0 14px">${escapeHtml(name)} still owes ${fmtMoney(f.outstanding)}.</p>
+        <form onsubmit="submitRepayment(event,'${prefix}','${loanId}')">
+          <div class="field"><label for="rpAmount">Amount received</label><input id="rpAmount" type="text" inputmode="decimal" required placeholder="0" value="${f.outstanding ? f.outstanding.toLocaleString('en-IN') : ''}" oninput="formatAmountInput(this)"></div>
+          <div class="field"><label for="rpDate">Date</label><input id="rpDate" type="date" value="${todayISO()}" required></div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+}
+function submitRepayment(e, prefix, loanId){
+  e.preventDefault();
+  const list = prefix==='ln' ? state.loans : state.borrowings;
+  const loan = list.find(l=>l.id===loanId);
+  if(!loan) return;
+  const amount = parseAmount(document.getElementById('rpAmount').value);
+  const date = document.getElementById('rpDate').value || todayISO();
+  if(!amount || amount<=0) return;
+  const name = prefix==='ln' ? loan.borrower : loan.lender;
+  loan.installments.push({ id: uid(), due: date, amount, status:'paid', paidDate: date });
+  state.transactions.push({ id: uid(), type: prefix==='ln' ? 'income' : 'expense', amount, category: prefix==='ln' ? 'Loan repayment received' : 'Loan repayment made', date, note: name });
+  const f = loanFigures(loan);
+  if(f.outstanding <= 0){ loan.closed = true; loan.closedDate = date; }
+  saveState();
+  closeModal();
+  render();
+}
+function deleteRepayment(prefix, loanId, instId){
+  const list = prefix==='ln' ? state.loans : state.borrowings;
+  const loan = list.find(l=>l.id===loanId);
+  if(!loan) return;
+  if(!confirm('Remove this repayment entry?')) return;
+  loan.installments = loan.installments.filter(i=>i.id!==instId);
+  loan.closed = false;
+  loan.closedDate = null;
+  saveState();
+  render();
+}
+function closeIouLoan(id){
+  const loan = state.loans.find(l=>l.id===id);
+  if(!loan) return;
+  const f = loanFigures(loan);
+  if(f.outstanding <= 0){ loan.closed = true; loan.closedDate = todayISO(); saveState(); render(); return; }
+  if(!confirm(`Mark this as fully settled? This records the remaining ${fmtMoney(f.outstanding)} as repaid today.`)) return;
+  loan.installments.push({ id: uid(), due: todayISO(), amount: f.outstanding, status:'paid', paidDate: todayISO() });
+  state.transactions.push({ id: uid(), type:'income', amount: f.outstanding, category:'Loan repayment received', date: todayISO(), note: loan.borrower });
+  loan.closed = true;
+  loan.closedDate = todayISO();
   saveState();
   render();
 }
@@ -842,6 +1311,7 @@ function unmarkInstallmentPaid(loanId, instId){
 }
 
 function openBorrowModal(){
+  brMode = 'emi';
   document.getElementById('modal-root').innerHTML = `
     <div class="overlay" onclick="if(event.target===this) closeModal()">
       <div class="modal">
@@ -853,22 +1323,26 @@ function openBorrowModal(){
             <button type="button" class="pick-contact" id="brPickBtn" onclick="pickContact('br')" title="Pick from contacts" aria-label="Pick from contacts">${ICONS.contact}</button>
           </div>
           <div class="field"><label for="brPhone">Phone number (optional)</label><input id="brPhone" type="tel" placeholder="For calling or sharing details"></div>
-          <div class="grid2">
-            <div class="field"><label for="brPrincipal">Loan amount</label><input id="brPrincipal" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this);updateEmiPreview('br')"></div>
-            <div class="field"><label for="brRate">Interest rate (%/mo)</label><input id="brRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional" oninput="updateEmiPreview('br')"></div>
+          <div class="type-toggle">
+            <button type="button" id="brModeEmi" class="sel-loan on" onclick="setLoanMode('br','emi')">Fixed EMI</button>
+            <button type="button" id="brModeInt" class="sel-loan" onclick="setLoanMode('br','interest')">Interest only</button>
+            <button type="button" id="brModeIou" class="sel-loan" onclick="setLoanMode('br','iou')">No interest</button>
           </div>
-          <div class="grid2">
+          <div class="field"><label for="brPrincipal">Loan amount</label><input id="brPrincipal" type="text" inputmode="decimal" required placeholder="0" oninput="formatAmountInput(this);updateEmiPreview('br')"></div>
+          <div class="grid2" id="brRateFreqFields">
+            <div class="field"><label for="brRate">Interest rate (%/mo)</label><input id="brRate" type="number" inputmode="decimal" min="0" step="0.1" placeholder="optional" oninput="updateEmiPreview('br')"></div>
             <div class="field"><label for="brFreq">Frequency</label>
               <select id="brFreq" onchange="updateEmiPreview('br')"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="yearly">Yearly</option></select>
             </div>
-            <div class="field"><label for="brStart">Start date</label><input id="brStart" type="date" value="${todayISO()}" required></div>
           </div>
+          <div class="field"><label for="brStart">Start date</label><input id="brStart" type="date" value="${todayISO()}" required></div>
           <div class="emi-preview" id="brEmiPreview">Enter the amount and interest rate to see the EMI.</div>
-          <button type="button" class="calc-link" onclick="calcEmi('br')">Use this EMI</button>
-          <div class="grid2">
+          <button type="button" class="calc-link" id="brCalcLink" onclick="calcEmi('br')">Use this EMI</button>
+          <div class="grid2" id="brEmiFields">
             <div class="field"><label for="brEmi">EMI amount</label><input id="brEmi" type="text" inputmode="decimal" required placeholder="e.g. 18,000" oninput="formatAmountInput(this)"></div>
             <div class="field"><label for="brCount">Number of EMIs</label><input id="brCount" type="number" inputmode="numeric" min="1" step="1" required placeholder="e.g. 36"></div>
           </div>
+          <div class="field" id="brNoteField" style="display:none"><label for="brNote">What's it for? (optional)</label><input id="brNote" type="text" placeholder="e.g. Medical help, festival advance"></div>
           <div class="modal-actions">
             <button type="button" class="btn" onclick="closeModal()">Cancel</button>
             <button type="submit" class="btn btn-primary">Save loan</button>
@@ -877,6 +1351,7 @@ function openBorrowModal(){
       </div>
     </div>`;
   hidePickButtonsIfUnsupported();
+  setLoanMode('br','emi');
 }
 function submitBorrow(e){
   e.preventDefault();
@@ -884,13 +1359,23 @@ function submitBorrow(e){
   const phone = document.getElementById('brPhone').value.trim();
   const principal = parseAmount(document.getElementById('brPrincipal').value);
   const rate = Number(document.getElementById('brRate').value) || 0;
-  const emiAmount = parseAmount(document.getElementById('brEmi').value);
   const freq = document.getElementById('brFreq').value;
-  const count = Number(document.getElementById('brCount').value);
   const start = document.getElementById('brStart').value || todayISO();
-  if(!lender || !principal || !emiAmount || !count) return;
-  const installments = generateSchedule(start, emiAmount, freq, count);
-  state.borrowings.push({ id: uid(), lender, phone, principal, rate, emiAmount, freq, count, start, installments });
+  if(!lender || !principal) return;
+  if(brMode === 'iou'){
+    const note = document.getElementById('brNote').value.trim();
+    state.borrowings.push({ id: uid(), lender, phone, principal, start, mode:'iou', closed:false, note, installments: [] });
+  } else if(brMode === 'interest'){
+    const emiAmount = computeEmi(principal, rate, freq);
+    state.borrowings.push({ id: uid(), lender, phone, principal, rate, emiAmount, freq, start, mode:'interest', closed:false, installments: [] });
+    ensureInterestSchedules();
+  } else {
+    const emiAmount = parseAmount(document.getElementById('brEmi').value);
+    const count = Number(document.getElementById('brCount').value);
+    if(!emiAmount || !count) return;
+    const installments = generateSchedule(start, emiAmount, freq, count);
+    state.borrowings.push({ id: uid(), lender, phone, principal, rate, emiAmount, freq, count, start, mode:'emi', installments });
+  }
   saveState();
   closeModal();
   loansTab = 'borrowed';
@@ -899,6 +1384,29 @@ function submitBorrow(e){
 function deleteBorrowing(id){
   if(!confirm('Delete this loan and its EMI schedule?')) return;
   state.borrowings = state.borrowings.filter(l=>l.id!==id);
+  saveState();
+  render();
+}
+function closeInterestBorrowing(id){
+  const loan = state.borrowings.find(l=>l.id===id);
+  if(!loan) return;
+  if(!confirm(`Mark this as settled? This records you paying back ${fmtMoney(loan.principal)} principal to ${loan.lender}.`)) return;
+  loan.closed = true;
+  loan.closedDate = todayISO();
+  state.transactions.push({ id: uid(), type:'expense', amount: Number(loan.principal), category:'Principal settlement', date: todayISO(), note: loan.lender });
+  saveState();
+  render();
+}
+function closeIouBorrowing(id){
+  const loan = state.borrowings.find(l=>l.id===id);
+  if(!loan) return;
+  const f = loanFigures(loan);
+  if(f.outstanding <= 0){ loan.closed = true; loan.closedDate = todayISO(); saveState(); render(); return; }
+  if(!confirm(`Mark this as fully settled? This records the remaining ${fmtMoney(f.outstanding)} as paid back today.`)) return;
+  loan.installments.push({ id: uid(), due: todayISO(), amount: f.outstanding, status:'paid', paidDate: todayISO() });
+  state.transactions.push({ id: uid(), type:'expense', amount: f.outstanding, category:'Loan repayment made', date: todayISO(), note: loan.lender });
+  loan.closed = true;
+  loan.closedDate = todayISO();
   saveState();
   render();
 }
@@ -925,8 +1433,8 @@ function unmarkBorrowInstallmentPaid(loanId, instId){
 }
 
 function confirmClearAll(){
-  if(!confirm('This clears every transaction and loan. This cannot be undone. Continue?')) return;
-  state = { transactions: [], loans: [], borrowings: [] };
+  if(!confirm('This clears every transaction, loan, and Bhandara entry. This cannot be undone. Continue?')) return;
+  state = { transactions: [], loans: [], borrowings: [], bhandara: { ledger: [] } };
   saveState();
   render();
 }
@@ -942,10 +1450,19 @@ function updateEmiPreview(prefix){
   const rate = Number(document.getElementById(prefix + 'Rate').value);
   const freq = document.getElementById(prefix + 'Freq').value;
   const box = document.getElementById(prefix + 'EmiPreview');
+  const mode = prefix==='ln' ? lnMode : brMode;
   if(!box) return;
-  if(!principal || !rate){ box.textContent = 'Enter the amount and interest rate to see the EMI.'; return; }
+  if(!principal || !rate){
+    box.textContent = mode==='interest'
+      ? 'Enter the amount and interest rate to see the interest per period.'
+      : 'Enter the amount and interest rate to see the EMI.';
+    return;
+  }
   const emi = computeEmi(principal, rate, freq);
-  box.innerHTML = `Estimated EMI: <b>₹${emi.toLocaleString('en-IN')}</b> per ${freq==='monthly'?'month':freq==='weekly'?'week':'year'}, at ${rate}%/month on ₹${principal.toLocaleString('en-IN')}.`;
+  const freqTxt = freq==='monthly'?'month':freq==='weekly'?'week':'year';
+  box.innerHTML = mode==='interest'
+    ? `Interest only: <b>₹${emi.toLocaleString('en-IN')}</b> per ${freqTxt}, at ${rate}%/month on ₹${principal.toLocaleString('en-IN')}. Principal stays outstanding until you settle it.`
+    : `Estimated EMI: <b>₹${emi.toLocaleString('en-IN')}</b> per ${freqTxt}, at ${rate}%/month on ₹${principal.toLocaleString('en-IN')}.`;
 }
 function calcEmi(prefix){
   const principal = parseAmount(document.getElementById(prefix + 'Principal').value);
@@ -986,26 +1503,43 @@ function shareLoanDetails(kind, id){
   const l = list.find(x=>x.id===id);
   if(!l) return;
   const name = kind==='lent' ? l.borrower : l.lender;
-  const total = l.installments.reduce((s,i)=>s+Number(i.amount),0);
-  const done = l.installments.filter(i=>i.status==='paid').reduce((s,i)=>s+Number(i.amount),0);
+  const f = loanFigures(l);
   const next = l.installments.find(i=>i.status==='pending');
+  const isInt = l.mode === 'interest';
+  const isIou = l.mode === 'iou';
   const lines = kind==='lent'
-    ? [
-        `Loan given to ${name}`,
-        `Principal: ${fmtMoney(l.principal)}${l.rate ? ' at ' + l.rate + '%/month' : ''}`,
-        `EMI: ${fmtMoney(l.emiAmount)} (${l.freq})`,
-        `Collected so far: ${fmtMoney(done)}`,
-        `Outstanding: ${fmtMoney(total-done)}`,
-        next ? `Next EMI due: ${fmtDate(next.due)}` : 'Fully collected'
-      ]
-    : [
-        `Loan taken from ${name}`,
-        `Principal: ${fmtMoney(l.principal)}${l.rate ? ' at ' + l.rate + '%/month' : ''}`,
-        `EMI: ${fmtMoney(l.emiAmount)} (${l.freq})`,
-        `Paid so far: ${fmtMoney(done)}`,
-        `Remaining: ${fmtMoney(total-done)}`,
-        next ? `Next EMI due: ${fmtDate(next.due)}` : 'Fully paid off'
-      ];
+    ? (isIou
+        ? [
+            `Loan given to ${name}`,
+            `Principal: ${fmtMoney(l.principal)} (no interest)`,
+            l.note ? `For: ${l.note}` : '',
+            `Repaid so far: ${fmtMoney(f.collected)}`,
+            l.closed ? 'Fully settled' : `Still owed: ${fmtMoney(f.outstanding)}`
+          ].filter(Boolean)
+        : [
+            `Loan given to ${name}`,
+            `Principal: ${fmtMoney(l.principal)}${l.rate ? ' at ' + l.rate + '%/month' : ''}`,
+            isInt ? `Interest only: ${fmtMoney(l.emiAmount)} (${l.freq})` : `EMI: ${fmtMoney(l.emiAmount)} (${l.freq})`,
+            isInt ? `Interest collected so far: ${fmtMoney(f.interestCollected)}` : `Collected so far: ${fmtMoney(f.collected)}`,
+            isInt ? (l.closed ? 'Principal settled' : `Principal outstanding: ${fmtMoney(f.principalOutstanding)}`) : `Outstanding: ${fmtMoney(f.outstanding)}`,
+            next ? `Next due: ${fmtDate(next.due)}` : (isInt ? '' : 'Fully collected')
+          ].filter(Boolean))
+    : (isIou
+        ? [
+            `Loan taken from ${name}`,
+            `Principal: ${fmtMoney(l.principal)} (no interest)`,
+            l.note ? `For: ${l.note}` : '',
+            `Paid back so far: ${fmtMoney(f.collected)}`,
+            l.closed ? 'Fully settled' : `Still owe: ${fmtMoney(f.outstanding)}`
+          ].filter(Boolean)
+        : [
+            `Loan taken from ${name}`,
+            `Principal: ${fmtMoney(l.principal)}${l.rate ? ' at ' + l.rate + '%/month' : ''}`,
+            isInt ? `Interest only: ${fmtMoney(l.emiAmount)} (${l.freq})` : `EMI: ${fmtMoney(l.emiAmount)} (${l.freq})`,
+            isInt ? `Interest paid so far: ${fmtMoney(f.interestCollected)}` : `Paid so far: ${fmtMoney(f.collected)}`,
+            isInt ? (l.closed ? 'Principal settled' : `Principal outstanding: ${fmtMoney(f.principalOutstanding)}`) : `Remaining: ${fmtMoney(f.outstanding)}`,
+            next ? `Next due: ${fmtDate(next.due)}` : (isInt ? '' : 'Fully paid off')
+          ].filter(Boolean));
   const text = lines.join('\n');
   if(navigator.share){
     navigator.share({ title: 'Loan details', text }).catch(()=>{});
